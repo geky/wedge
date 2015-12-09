@@ -4,8 +4,6 @@ GG = ghc
 
 SRC += $(wildcard *.hs)
 
-GFLAGS += -Wall
-
 
 all: $(TARGET)
 

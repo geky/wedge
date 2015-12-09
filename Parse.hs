@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module Parse where
 
 import Prelude hiding (lex)
@@ -14,28 +12,23 @@ data PTree
   | PNop
   deriving Show
 
-
 parseSym :: Rule Token String
-parseSym (TSym sym : ts) = (sym, ts)
-parseSym ts = unexpected ts
+parseSym (TSym sym:ts) = Accept sym ts
+parseSym ts            = Reject ts
 
 parseType :: Rule Token PTree
-parseType (TSym sym : ts@(TSym _ : _)) = (PType sym, ts)
-parseType ts = unexpected ts
+parseType (TSym sym:ts@(TSym _:_)) = Accept (PType sym) ts
+parseType ts                       = Reject ts
 
 parseDecl :: Rule Token PTree
-parseDecl = PDecl $~ parseType *~ parseSym
+parseDecl = PDecl ~$ parseType ~* parseSym
 
-parseDeclList :: Rule Token [PTree]
-parseDeclList []         = ([], [])
-parseDeclList (TTerm:ts) = parseDeclList ts
-parseDeclList ts         = parseDecl ~> parseDeclList' $ ts
+parseDeclList :: Rule Token PTree
+parseDeclList = PDeclList ~$ separate parseDecl parseDeclSep
   where
-    parseDeclList' decl []          = ([decl], [])
-    parseDeclList' decl (TTerm:ts') = (decl:) $~ parseDeclList $ ts'
-    parseDeclList' _ ts' = unexpected ts'
-
+    parseDeclSep (TTerm:ts) = Accept () ts
+    parseDeclSep ts         = Reject ts
 
 parse :: [Token] -> PTree
-parse ts = PDeclList $ fst $ parseDeclList ts
+parse = run parseDeclList
 

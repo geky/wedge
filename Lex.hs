@@ -1,6 +1,6 @@
 module Lex where
 
-import Prelude hiding (lex)
+import Prelude hiding (lex, repeat)
 import Data.Char
 import Rule
 
@@ -13,21 +13,23 @@ data Token
   | TRBlock
   deriving Show
 
-tokenize :: Rule Char Token
-tokenize ('(':cs) = (TLParen, cs)
-tokenize (')':cs) = (TRParen, cs)
-tokenize ('{':cs) = (TLBlock, cs)
-tokenize ('}':cs) = (TRBlock, cs)
 
-tokenize (c:cs) | elem c [',', ';', '\n', '\r'] = (TTerm, cs)
+tokenize :: Rule Char Token
+
+tokenize ('(':cs) = Accept TLParen cs
+tokenize (')':cs) = Accept TRParen cs
+tokenize ('{':cs) = Accept TLBlock cs
+tokenize ('}':cs) = Accept TRBlock cs
+
+tokenize (c:cs) | elem c ",;\n\r" = Accept TTerm cs
 tokenize (c:cs) | isSpace c = tokenize cs
 
-tokenize cs@(c:_) | isAlpha c = (TSym sym, cs')
+tokenize cs@(c:_) | isAlpha c = Accept (TSym sym) cs'
   where (sym, cs') = span isAlphaNum cs
 
-tokenize cs = unexpected cs
+tokenize ts = Reject ts
 
 
 lex :: String -> [Token]
-lex = run tokenize
+lex = run $ repeat tokenize
 
