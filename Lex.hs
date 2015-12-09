@@ -11,7 +11,7 @@ data Token
   | TRParen
   | TLBlock
   | TRBlock
-  deriving Show
+  deriving (Show, Eq)
 
 
 tokenize :: Rule Char Token

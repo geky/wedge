@@ -42,8 +42,8 @@ repeat  r = (:) ~$ r ~* repeat r ~| Accept []
 repeat1 r = (:) ~$ r ~* repeat r
 
 delimit, delimit1 :: Rule t a -> Rule t b -> Rule t [a]
-delimit  r s = (:) ~$ r ~< s ~* delimit r s ~| Accept []
-delimit1 r s = (:) ~$ r ~* delimit r s
+delimit  r s = (:) ~$ r ~* (s ~> delimit r s ~| Accept []) ~| Accept []
+delimit1 r s = (:) ~$ r ~* (s ~> delimit r s ~| Accept [])
 
 terminate, terminate1 :: Rule t a -> Rule t b -> Rule t [a]
 terminate  r s = repeat  (r ~< s)
@@ -52,6 +52,14 @@ terminate1 r s = repeat1 (r ~< s)
 separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
 separate  r s = repeat s ~> delimit  r (repeat1 s) ~< repeat s
 separate1 r s = repeat s ~> delimit1 r (repeat1 s) ~< repeat s
+
+
+match :: Eq a => a -> Rule a a
+match a = check (== a)
+
+check :: (a -> Bool) -> Rule a a
+check p (t:ts) | p t = Accept t ts
+check _ ts           = Reject ts
 
 
 unexpected :: Show t => [t] -> a
