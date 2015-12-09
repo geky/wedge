@@ -8,7 +8,7 @@ import Type
 
 data PTree
   = PType String
-  | PDecl Type String
+  | PDecl [Type] String
   | PNop
   deriving Show
 
@@ -16,13 +16,20 @@ parseSym :: Rule Token String
 parseSym (TSym sym:ts) = Accept sym ts
 parseSym ts            = Reject ts
 
-parseType :: Rule Token Type
-parseType = delimit1 parseType' (match TTerm)
+parseBaseType :: Rule Token Type
+parseBaseType (TSym sym:ts) = Accept (Type sym) ts
+parseBaseType (TLParen:ts)  = (TupleType ~$ parseType ~< match TRParen) ts
+parseBaseType ts            = Reject ts
+
+parseType :: Rule Token [Type]
+parseType = delimit1 parseBaseType (match TTerm) ~~ mod 
   where
-    parseType' (TSym "int"  :ts) = Accept IntType   ts
-    parseType' (TSym "uint" :ts) = Accept UIntType  ts
-    parseType' (TSym "float":ts) = Accept FloatType ts
-    parseType' ts                = Reject ts
+    mod y (TLParen:ts) = (funcmod y ~$ parseType ~< match TRParen) ts
+    mod y (TLBrace:ts) = (const (arraymod y) ~$ match TRBrace) ts
+    mod y ts           = Accept y ts
+
+    funcmod y z = [FunctionType y z]
+    arraymod y = [ArrayType y]
 
 parseDecl :: Rule Token PTree
 parseDecl = PDecl ~$ parseType ~* parseSym

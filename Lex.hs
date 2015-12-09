@@ -11,6 +11,8 @@ data Token
   | TRParen
   | TLBlock
   | TRBlock
+  | TLBrace
+  | TRBrace
   deriving (Show, Eq)
 
 
@@ -20,6 +22,8 @@ tokenize ('(':cs) = Accept TLParen cs
 tokenize (')':cs) = Accept TRParen cs
 tokenize ('{':cs) = Accept TLBlock cs
 tokenize ('}':cs) = Accept TRBlock cs
+tokenize ('[':cs) = Accept TLBrace cs
+tokenize (']':cs) = Accept TRBrace cs
 
 tokenize (c:cs) | elem c ",;\n\r" = Accept TTerm cs
 tokenize (c:cs) | isSpace c = tokenize cs

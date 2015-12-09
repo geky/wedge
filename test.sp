@@ -2,6 +2,6 @@
 
 int,int a
 int b
-uint d
+uint[] d
 float q
    
