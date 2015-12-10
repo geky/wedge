@@ -1,65 +1,72 @@
 module Rule where
 
 import Prelude hiding (repeat)
+import Control.Applicative
 
 
-type Rule t a = [t] -> Result t a
+newtype Rule t a = Rule { step :: [t] -> Result t a }
 
 data Result t a
-  = Accept a [t]
-  | Reject   [t]
+    = Accept a [t]
+    | Reject   [t]
+
+infixl 2 `step`
 
 
-(~$) :: (a -> b) -> Rule t a -> Rule t b
-(~$) f a ts = case a ts of
-  Accept a ts -> Accept (f a) ts
-  Reject   ts -> Reject       ts
+instance Functor (Rule t) where
+    fmap f r = Rule $ \t -> case step r t of
+        Accept a t -> Accept (f a) t
+        Reject   t -> Reject t
 
-(~*) :: Rule t (a -> b) -> Rule t a -> Rule t b
-(~*) f a ts = case f ts of
-  Accept f ts -> f ~$ a $ ts
-  Reject   ts -> Reject ts
+instance Applicative (Rule t) where
+    pure a = Rule $ Accept a
 
-(~|) :: Rule t a -> Rule t a -> Rule t a
-(~|) a b ts = case a ts of
-  Accept a ts -> Accept a ts
-  Reject   ts -> b ts
+    f <*> a = Rule $ \t -> case step f t of
+        Accept f t -> f <$> a `step` t
+        Reject   t -> Reject t
 
-(~~) :: Rule t a -> (a -> Rule t b) -> Rule t b
-(~~) a f ts = case a ts of
-  Accept a ts -> f a ts
-  Reject   ts -> Reject ts
+instance Alternative (Rule t) where
+    empty = Rule Reject
 
-(~>) :: Rule t a -> Rule t b -> Rule t b
-(~>) a b = a ~~ const b
+    a <|> b = Rule $ \t -> case step a t of
+        Accept a t -> Accept a t
+        Reject   _ -> step b t
 
-(~<) :: Rule t a -> Rule t b -> Rule t a
-(~<) a b = a ~~ \a -> const a ~$ b
+instance Monad (Rule t) where
+    return a = Rule $ Accept a
+    fail _   = Rule $ Reject
+
+    a >>= f = Rule $ \t -> case step a t of
+        Accept a t -> f a `step` t
+        Reject   t -> Reject t
 
 
 repeat, repeat1 :: Rule t a -> Rule t [a]
-repeat  r = (:) ~$ r ~* repeat r ~| Accept []
-repeat1 r = (:) ~$ r ~* repeat r
+repeat  r = (:) <$> r <*> repeat r <|> pure []
+repeat1 r = (:) <$> r <*> repeat r
 
 delimit, delimit1 :: Rule t a -> Rule t b -> Rule t [a]
-delimit  r s = (:) ~$ r ~* (s ~> delimit r s ~| Accept []) ~| Accept []
-delimit1 r s = (:) ~$ r ~* (s ~> delimit r s ~| Accept [])
+delimit  r s = (:) <$> r <*> (s *> delimit r s <|> pure []) <|> pure []
+delimit1 r s = (:) <$> r <*> (s *> delimit r s <|> pure [])
 
 terminate, terminate1 :: Rule t a -> Rule t b -> Rule t [a]
-terminate  r s = repeat  (r ~< s)
-terminate1 r s = repeat1 (r ~< s)
+terminate  r s = repeat  (r <* s)
+terminate1 r s = repeat1 (r <* s)
 
 separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
-separate  r s = repeat s ~> delimit  r (repeat1 s) ~< repeat s
-separate1 r s = repeat s ~> delimit1 r (repeat1 s) ~< repeat s
+separate  r s = repeat s *> delimit  r (repeat1 s) <* repeat s
+separate1 r s = repeat s *> delimit1 r (repeat1 s) <* repeat s
 
 
-match :: Eq a => a -> Rule a a
-match a = check (== a)
+nomatch, match :: Eq a => a -> Rule a a
+nomatch a = matchp (/= a)
+match   a = matchp (== a)
 
-check :: (a -> Bool) -> Rule a a
-check p (t:ts) | p t = Accept t ts
-check _ ts           = Reject ts
+nomatchp, matchp :: (a -> Bool) -> Rule a a
+nomatchp p = matchp (not . p)
+matchp   p = Rule $ \t -> case t of
+    (t:ts) | p t -> Accept t ts
+    ts           -> Reject ts
 
 
 unexpected :: Show t => [t] -> a
@@ -67,7 +74,7 @@ unexpected (t:_) = error $ "unexpected " ++ (show t)
 unexpected _     = error $ "unexpected end of input"
 
 run :: Show t => Rule t a -> [t] -> a
-run r ts = case r ts of
+run r t = case step r t of
   Accept a [] -> a
   Accept _ ts -> unexpected ts
   Reject   ts -> unexpected ts

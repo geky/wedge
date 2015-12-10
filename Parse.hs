@@ -1,6 +1,7 @@
-module Parse where
+module Parse (PTree, parse) where
 
 import Prelude hiding (lex)
+import Control.Applicative
 import Lex
 import Rule
 import Type
@@ -8,32 +9,38 @@ import Type
 
 data PTree
   = PType String
-  | PDecl [Type] String
+  | PDecl Type String
   | PNop
   deriving Show
 
-parseSym :: Rule Token String
-parseSym (TSym sym:ts) = Accept sym ts
-parseSym ts            = Reject ts
+sym :: Rule Token String
+sym = Rule $ \t -> case t of
+    TSym sym:ts -> Accept sym ts
+    ts          -> Reject ts
 
-parseBaseType :: Rule Token Type
-parseBaseType (TSym sym:ts) = Accept (Type sym) ts
-parseBaseType (TLParen:ts)  = (TupleType ~$ parseType ~< match TRParen) ts
-parseBaseType ts            = Reject ts
+term :: Rule Token Token
+term = match TTerm
 
-parseType :: Rule Token [Type]
-parseType = delimit1 parseBaseType (match TTerm) ~~ mod 
+type_ :: Rule Token Type
+type_ = func <|> array <|> struct
   where
-    mod y (TLParen:ts) = (funcmod y ~$ parseType ~< match TRParen) ts
-    mod y (TLBrace:ts) = (const (arraymod y) ~$ match TRBrace) ts
-    mod y ts           = Accept y ts
+    func  = FuncType <$> struct <* match TLParen <*> struct <* match TRParen
+    array = ArrayType <$> base <* match TLBrace <* match TRBrace
 
-    funcmod y z = [FunctionType y z]
-    arraymod y = [ArrayType y]
+    struct = tuple <$> delimit1 base term
+      where
+        tuple [y] = y
+        tuple ys  = StructType ys
 
-parseDecl :: Rule Token PTree
-parseDecl = PDecl ~$ parseType ~* parseSym
+    base = Rule $ \t -> case t of
+        TSym "void":ts -> Accept Void ts
+        TSym sym:ts    -> Accept (Type sym) ts
+        TLParen:ts     -> type_ <* match TRParen `step` ts
+        ts             -> Reject ts
+        
+decl :: Rule Token PTree
+decl = PDecl <$> type_ <*> sym
 
 parse :: [Token] -> [PTree]
-parse = run $ separate parseDecl $ match TTerm
+parse = run $ separate decl term
 

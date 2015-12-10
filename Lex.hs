@@ -17,21 +17,21 @@ data Token
 
 
 tokenize :: Rule Char Token
+tokenize = Rule $ \t -> case t of
+    '(':cs -> Accept TLParen cs
+    ')':cs -> Accept TRParen cs
+    '{':cs -> Accept TLBlock cs
+    '}':cs -> Accept TRBlock cs
+    '[':cs -> Accept TLBrace cs
+    ']':cs -> Accept TRBrace cs
 
-tokenize ('(':cs) = Accept TLParen cs
-tokenize (')':cs) = Accept TRParen cs
-tokenize ('{':cs) = Accept TLBlock cs
-tokenize ('}':cs) = Accept TRBlock cs
-tokenize ('[':cs) = Accept TLBrace cs
-tokenize (']':cs) = Accept TRBrace cs
+    c:cs | elem c ",;\n\r" -> Accept TTerm cs
+    c:cs | isSpace c -> step tokenize cs
 
-tokenize (c:cs) | elem c ",;\n\r" = Accept TTerm cs
-tokenize (c:cs) | isSpace c = tokenize cs
+    c:cs | isAlpha c -> Accept (TSym sym) cs'
+      where (sym, cs') = span isAlphaNum (c:cs)
 
-tokenize cs@(c:_) | isAlpha c = Accept (TSym sym) cs'
-  where (sym, cs') = span isAlphaNum cs
-
-tokenize ts = Reject ts
+    cs -> Reject cs
 
 
 lex :: String -> [Token]
