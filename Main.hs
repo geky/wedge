@@ -11,7 +11,7 @@ ext new path = rawpath ++ "." ++ new
     old = ".sp"
     rawpath
       | isSuffixOf old path = take (length path - length old) path
-      | otherwise = path
+      | otherwise           = path
 
 compile :: (FilePath, String) -> [(FilePath, String)]
 compile (file, input) = [

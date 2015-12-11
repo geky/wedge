@@ -41,6 +41,9 @@ instance Monad (Rule t) where
         Reject   t -> Reject t
 
 
+option :: Rule t a -> Rule t (Maybe a)
+option r = Just <$> r <|> pure Nothing
+
 repeat, repeat1 :: Rule t a -> Rule t [a]
 repeat  r = (:) <$> r <*> repeat r <|> pure []
 repeat1 r = (:) <$> r <*> repeat r
@@ -57,25 +60,35 @@ separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
 separate  r s = repeat s *> delimit  r (repeat1 s) <* repeat s
 separate1 r s = repeat s *> delimit1 r (repeat1 s) <* repeat s
 
+chain, chain1 :: (a -> Rule t a) -> a -> Rule t [a]
+chain  f a = (a:) <$> (f a >>= chain f) <|> pure []
+chain1 f a = (a:) <$> (f a >>= chain f)
 
-nomatch, match :: Eq a => a -> Rule a a
-nomatch a = matchp (/= a)
+
+match, matchno :: Eq a => a -> Rule a a
 match   a = matchp (== a)
+matchno a = matchp (/= a)
 
-nomatchp, matchp :: (a -> Bool) -> Rule a a
-nomatchp p = matchp (not . p)
+matchp, matchnop :: (a -> Bool) -> Rule a a
+matchnop p = matchp (not . p)
 matchp   p = Rule $ \t -> case t of
     (t:ts) | p t -> Accept t ts
-    ts           -> Reject ts
+    ts           -> Reject   ts
+
+look, lookno :: Eq a => a -> Rule a a
+look   a = lookp (== a)
+lookno a = lookp (/= a)
+
+lookp, looknop :: (a -> Bool) -> Rule a a
+looknop p = lookp (not . p)
+lookp   p = Rule $ \t -> case t of
+    ts@(t:_) | p t -> Accept t ts
+    ts             -> Reject   ts
 
 
-unexpected :: Show t => [t] -> a
-unexpected (t:_) = error $ "unexpected " ++ (show t)
-unexpected _     = error $ "unexpected end of input"
-
-run :: Show t => Rule t a -> [t] -> a
-run r t = case step r t of
-  Accept a [] -> a
-  Accept _ ts -> unexpected ts
-  Reject   ts -> unexpected ts
+run :: ([t] -> a) -> Rule t a -> [t] -> a
+run err r t = case step r t of
+    Accept a [] -> a
+    Accept _ ts -> err ts
+    Reject   ts -> err ts
 

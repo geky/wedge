@@ -3,17 +3,24 @@ module Lex where
 import Prelude hiding (lex, repeat)
 import Data.Char
 import Rule
+import Control.Monad
 
+
+-- Line numbers in file
+type Line = Int
+
+
+-- Token type and associated rules
 data Token
-  = TSym String
-  | TTerm
-  | TLParen
-  | TRParen
-  | TLBlock
-  | TRBlock
-  | TLBrace
-  | TRBrace
-  deriving (Show, Eq)
+    = TSym      String  --Line
+    | TTerm             --Line
+    | TLParen           --Line
+    | TRParen           --Line
+    | TLBlock           --Line
+    | TRBlock           --Line
+    | TLBrace           --Line
+    | TRBrace           --Line
+    deriving (Show, Eq)
 
 
 tokenize :: Rule Char Token
@@ -33,7 +40,23 @@ tokenize = Rule $ \t -> case t of
 
     cs -> Reject cs
 
+tokenLine :: Rule Char Int
+tokenLine = Rule $ \t -> case t of
+    '\n':cs -> Accept 1 cs
+    cs      -> case step tokenize cs of
+        Accept _ cs -> Accept 0 cs
+        Reject   cs -> Reject   cs
+
 
 lex :: String -> [Token]
-lex = run $ repeat tokenize
+lex cs = run unexpected (repeat tokenize) cs
+  where
+    unexpected cs = error $ "unexpected " ++ what cs
+
+    what []        = "end of input"
+    what cs'@(c:_) = show c ++ " on line " ++ show n
+      where n = length $ filter (== '\n') $ take (length cs - length cs') cs
+
+lexLines :: String -> [Int]
+lexLines = scanl (+) 0 . run undefined (repeat tokenLine)
 
