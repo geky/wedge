@@ -7,11 +7,13 @@ import Rule
 import Type
 
 
+-- Parse tree definitions
 data PTree
   = Decl Type String
   deriving Show
 
 
+-- Parsing rules
 decl :: Rule Token PTree
 decl = Decl <$> type_ <*> sym
 

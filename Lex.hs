@@ -6,7 +6,7 @@ import Rule
 import Control.Monad
 
 
--- Tokens and related rules
+-- Token definitions
 data Token
     = Sym   { tsym :: String,   tline :: Line }
     | Term  {                   tline :: Line }
@@ -21,6 +21,7 @@ instance Unexpectable Token where
     line = tline . head
 
 
+-- Token rules
 sym :: Rule Token String
 sym = Rule $ \ts -> case ts of
     Sym{tsym=sym}:ts -> Accept sym ts
@@ -48,10 +49,7 @@ tokenize = Rule $ \cs -> case cs of
     cs                      -> Reject cs
 
 
-instance Unexpectable Char where
-    line = length . filter (== '\n')
-
 lex :: String -> [Token]
 lex cs = lcount $ run (repeat tokenize) cs
-  where lcount = scanl1 (\a b -> b{tline=tline a + tline b})
+  where lcount = scanl1 (\a b -> b {tline = tline a + tline b})
 

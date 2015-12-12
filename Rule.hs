@@ -6,14 +6,13 @@ import Data.Maybe
 import Data.List hiding (repeat)
 
 
+-- Rule definition and operations
 newtype Rule t a = Rule { step :: [t] -> Result t a }
 
-data Result t a
-    = Accept a [t]
-    | Reject   [t]
+data Result t a = Accept a [t]
+                | Reject   [t]
 
 infixl 2 `step`
-
 
 instance Functor (Rule t) where
     fmap f r = Rule $ \ts -> case step r ts of
@@ -38,7 +37,7 @@ instance Alternative (Rule t) where
 look :: Rule t a -> Rule t a
 look r = Rule $ \ts -> case step r ts of
     Accept a _  -> Accept a ts
-    Reject   ts -> Reject   ts
+    Reject   ts -> Reject ts
 
 
 option :: Rule t a -> Rule t (Maybe a)
@@ -82,6 +81,7 @@ matchMaybe f = Rule $ \ts -> case ts of
     ts                    -> Reject ts
 
 
+-- Unexpectable typeclass used for reporting errors
 type Line = Int
 
 class (Show t) => Unexpectable t where
@@ -91,6 +91,10 @@ class (Show t) => Unexpectable t where
     unexpected ts = error $ "unexpected " ++ case ts of
         (t:_) -> show t ++ " on line " ++ show (line ts + 1)
         _     -> "end of input"
+
+instance Unexpectable Char where
+    line = length . filter (== '\n')
+
 
 run :: (Unexpectable t) => Rule t a -> [t] -> a
 run r ts = case step r ts of

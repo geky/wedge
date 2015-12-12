@@ -5,6 +5,7 @@ import Lex
 import Control.Applicative
 import Data.List
 
+-- Type definitions
 data Type
   = Void
   | Type String
