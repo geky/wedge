@@ -10,53 +10,55 @@ import Control.Monad
 type Line = Int
 
 
--- Token type and associated rules
+-- Tokens and related rules
 data Token
-    = TSym      String  --Line
-    | TTerm             --Line
-    | TLParen           --Line
-    | TRParen           --Line
-    | TLBlock           --Line
-    | TRBlock           --Line
-    | TLBrace           --Line
-    | TRBrace           --Line
-    deriving (Show, Eq)
+    = Sym   { sym :: String,    line :: Line }
+    | Term  {                   line :: Line }
+    | Token { tok :: String,    line :: Line }
+    deriving Show
+
+tsym :: Rule Token String
+tsym = Rule $ \ts -> case ts of
+    Sym{sym=sym}:ts -> Accept sym ts
+    ts              -> Reject     ts
+
+tterm :: Rule Token ()
+tterm = Rule $ \ts -> case ts of
+    Term{}:ts -> Accept () ts
+    ts        -> Reject    ts
+
+token :: String -> Rule Token ()
+token t = Rule $ \ts -> case ts of
+    Token{tok=t'}:ts | t == t' -> Accept () ts
+    ts                         -> Reject    ts
 
 
 tokenize :: Rule Char Token
-tokenize = Rule $ \t -> case t of
-    '(':cs -> Accept TLParen cs
-    ')':cs -> Accept TRParen cs
-    '{':cs -> Accept TLBlock cs
-    '}':cs -> Accept TRBlock cs
-    '[':cs -> Accept TLBrace cs
-    ']':cs -> Accept TRBrace cs
-
-    c:cs | elem c ",;\n\r" -> Accept TTerm cs
-    c:cs | isSpace c -> step tokenize cs
-
-    c:cs | isAlpha c -> Accept (TSym sym) cs'
+tokenize = Rule $ \cs -> case cs of
+    c:cs | elem c "(){}[]"  -> Accept (Token [c] 0) cs
+    c:cs | elem c ",;"      -> Accept (Term 0) cs
+    '\n':cs                 -> Accept (Term 1) cs
+    c:cs | isSpace c        -> step tokenize cs
+    c:cs | isAlpha c        -> Accept (Sym sym 0) cs'
       where (sym, cs') = span isAlphaNum (c:cs)
+    cs                      -> Reject cs
 
-    cs -> Reject cs
-
-tokenLine :: Rule Char Int
-tokenLine = Rule $ \t -> case t of
-    '\n':cs -> Accept 1 cs
-    cs      -> case step tokenize cs of
-        Accept _ cs -> Accept 0 cs
-        Reject   cs -> Reject   cs
+unexpected :: [Token] -> a
+unexpected ts = error $ "unexpected " ++ case ts of
+    Sym{sym=sym, line=line}:ts -> "symbol "++show sym++" on line "++show line
+    Token{tok=t, line=line}:ts -> "token "++show t++" on line "++show line
+    Term{line=line}:ts         -> "terminator on line "++show line
+    _                          -> "end of input"
 
 
 lex :: String -> [Token]
-lex cs = run unexpected (repeat tokenize) cs
+lex cs = lcount $ run unexpected (repeat tokenize) cs
   where
-    unexpected cs = error $ "unexpected " ++ what cs
+    lcount = map (\a -> a {line = line a + 1})
+           . scanl1 (\a b -> b {line = line a + line b})
 
-    what []        = "end of input"
-    what cs'@(c:_) = show c ++ " on line " ++ show n
-      where n = length $ filter (== '\n') $ take (length cs - length cs') cs
-
-lexLines :: String -> [Int]
-lexLines = scanl (+) 0 . run undefined (repeat tokenLine)
+    unexpected cs = error $ "unexpected " ++ case cs of
+        cs'@(c:_) -> show c ++ " on line " ++ show n
+          where n = length $ filter (=='\n') $ take (length cs - length cs') cs
+        _         -> "end of input"
 

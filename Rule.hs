@@ -1,7 +1,11 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Rule where
 
 import Prelude hiding (repeat)
 import Control.Applicative
+import Data.Maybe
+import Data.List hiding (repeat)
 
 
 newtype Rule t a = Rule { step :: [t] -> Result t a }
@@ -14,31 +18,29 @@ infixl 2 `step`
 
 
 instance Functor (Rule t) where
-    fmap f r = Rule $ \t -> case step r t of
-        Accept a t -> Accept (f a) t
-        Reject   t -> Reject t
+    fmap f r = Rule $ \ts -> case step r ts of
+        Accept a ts -> Accept (f a) ts
+        Reject ts   -> Reject ts
 
 instance Applicative (Rule t) where
     pure a = Rule $ Accept a
 
-    f <*> a = Rule $ \t -> case step f t of
-        Accept f t -> f <$> a `step` t
-        Reject   t -> Reject t
+    f <*> a = Rule $ \ts -> case step f ts of
+        Accept f ts -> f <$> a `step` ts
+        Reject ts   -> Reject ts
 
 instance Alternative (Rule t) where
     empty = Rule Reject
 
-    a <|> b = Rule $ \t -> case step a t of
-        Accept a t -> Accept a t
-        Reject   _ -> step b t
+    a <|> b = Rule $ \ts -> case step a ts of
+        Accept a ts -> Accept a ts
+        Reject _    -> step b ts
 
-instance Monad (Rule t) where
-    return a = Rule $ Accept a
-    fail _   = Rule $ Reject
 
-    a >>= f = Rule $ \t -> case step a t of
-        Accept a t -> f a `step` t
-        Reject   t -> Reject t
+look :: Rule t a -> Rule t a
+look r = Rule $ \ts -> case step r ts of
+    Accept a _  -> Accept a ts
+    Reject   ts -> Reject   ts
 
 
 option :: Rule t a -> Rule t (Maybe a)
@@ -60,34 +62,30 @@ separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
 separate  r s = repeat s *> delimit  r (repeat1 s) <* repeat s
 separate1 r s = repeat s *> delimit1 r (repeat1 s) <* repeat s
 
-chain, chain1 :: (a -> Rule t a) -> a -> Rule t [a]
-chain  f a = (a:) <$> (f a >>= chain f) <|> pure []
-chain1 f a = (a:) <$> (f a >>= chain f)
 
+match :: Eq t => t -> Rule t t
+match t = Rule $ \ts -> case ts of
+    (t':ts) | t == t' -> Accept t' ts
+    ts                -> Reject ts
 
-match, matchno :: Eq a => a -> Rule a a
-match   a = matchp (== a)
-matchno a = matchp (/= a)
+matchN :: Eq t => [t] -> Rule t [t]
+matchN ts = Rule $ \ts' -> case ts' of
+    ts' | isPrefixOf ts ts' -> uncurry Accept $ splitAt (length ts) ts'
+    ts'                     -> Reject ts'
 
-matchp, matchnop :: (a -> Bool) -> Rule a a
-matchnop p = matchp (not . p)
-matchp   p = Rule $ \t -> case t of
+matchIf :: (t -> Bool) -> Rule t t
+matchIf p = Rule $ \ts -> case ts of
     (t:ts) | p t -> Accept t ts
-    ts           -> Reject   ts
+    ts           -> Reject ts
 
-look, lookno :: Eq a => a -> Rule a a
-look   a = lookp (== a)
-lookno a = lookp (/= a)
-
-lookp, looknop :: (a -> Bool) -> Rule a a
-looknop p = lookp (not . p)
-lookp   p = Rule $ \t -> case t of
-    ts@(t:_) | p t -> Accept t ts
-    ts             -> Reject   ts
+matchMaybe :: (t -> Maybe a) -> Rule t a
+matchMaybe f = Rule $ \ts -> case ts of
+    (t:ts) | isJust (f t) -> Accept (fromJust (f t)) ts
+    ts                    -> Reject ts
 
 
 run :: ([t] -> a) -> Rule t a -> [t] -> a
-run err r t = case step r t of
+run err r ts = case step r ts of
     Accept a [] -> a
     Accept _ ts -> err ts
     Reject   ts -> err ts
