@@ -20,21 +20,21 @@ type_ = func <|> array <|> struct
     func  = FuncType <$> struct <* look (token "(") <*> struct
     array = ArrayType <$> base <* token "[" <* token "]"
 
-    struct = tuple <$> delimit1 base tterm
+    struct = tuple <$> delimit1 base term
       where
         tuple [y] = y
         tuple ys  = StructType ys
 
     base = Rule $ \ts -> case ts of
-        Sym{sym="void"}:ts -> Accept Void ts
-        Sym{sym=sym}:ts    -> Accept (Type sym) ts
-        Token{tok="("}:ts  -> type_ <* token ")" `step` ts
-        ts                 -> Reject ts
+        Sym{tsym="void"}:ts -> Accept Void ts
+        Sym{tsym=sym}:ts    -> Accept (Type sym) ts
+        Token{tt="("}:ts    -> type_ <* token ")" `step` ts
+        ts                  -> Reject ts
         
 decl :: Rule Token PTree
-decl = PDecl <$> type_ <*> tsym
+decl = PDecl <$> type_ <*> sym
 
 
 parse :: [Token] -> [PTree]
-parse = run unexpected $ separate decl tterm
+parse = run $ separate decl term
 

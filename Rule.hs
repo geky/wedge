@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module Rule where
 
 import Prelude hiding (repeat)
@@ -84,9 +82,21 @@ matchMaybe f = Rule $ \ts -> case ts of
     ts                    -> Reject ts
 
 
-run :: ([t] -> a) -> Rule t a -> [t] -> a
-run err r ts = case step r ts of
+type Line = Int
+
+class (Show t) => Unexpectable t where
+    line :: [t] -> Line
+
+    unexpected :: [t] -> a
+    unexpected ts = error $ "unexpected " ++ case ts of
+        (t:_) -> show t ++ " on line " ++ show (line ts + 1)
+        _     -> "end of input"
+
+run :: (Unexpectable t) => Rule t a -> [t] -> a
+run r ts = case step r ts of
     Accept a [] -> a
-    Accept _ ts -> err ts
-    Reject   ts -> err ts
+    Accept _ ts -> unexpected $ handled ts
+    Reject   ts -> unexpected $ handled ts
+  where
+    handled ts' = reverse $ take (length ts - length ts' + 1) ts
 
