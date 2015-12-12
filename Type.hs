@@ -10,7 +10,7 @@ data Type
   = Void
   | Type String
   | StructType [Type]
-  | ArrayType Type
+  | ArrayType Type (Maybe Int)
   | FuncType Type Type
   deriving Show
 
@@ -18,7 +18,7 @@ data Type
 -- Type rules
 func, array, struct :: Rule Token Type
 func   = FuncType <$> struct <* look (token "(") <*> struct
-array  = ArrayType <$> base <* token "[" <* token "]"
+array  = ArrayType <$> base <* token "[" <*> option int <* token "]"
 struct = tuple <$> delimit1 base term
   where tuple [y] = y
         tuple ys  = StructType ys
@@ -46,17 +46,19 @@ genMembers (StructType ys) =
 
 genType :: Type -> String
 genType y = case y of
-    Void         -> "void"
-    Type "int"   -> "int"
-    Type "uint"  -> "uint"
-    Type t       -> t
-    StructType _ -> "struct " ++ genMembers y
-    ArrayType y  -> genType y ++ "[]"
-    FuncType y z -> genType y ++ " (*)" ++ genArgs z
+    Void                 -> "void"
+    Type "int"           -> "int"
+    Type "uint"          -> "uint"
+    Type t               -> t
+    StructType _         -> "struct " ++ genMembers y
+    ArrayType y (Just n) -> genType y ++ "[" ++ show n ++ "]"
+    ArrayType y _        -> genType y ++ "[]"
+    FuncType y z         -> genType y ++ " (*)" ++ genArgs z
 
 genDecl :: Type -> String -> String
 genDecl y name = case y of
-    ArrayType y  -> genType y ++ " " ++ name ++ "[]"
-    FuncType y z -> genType y ++ " (*" ++ name ++ ")" ++ genArgs z
-    y            -> genType y ++ " " ++ name
+    ArrayType y (Just n) -> genType y ++ " " ++ name ++ "[" ++ show n ++ "]"
+    ArrayType y _        -> genType y ++ " " ++ name ++ "[]"
+    FuncType y z         -> genType y ++ " (*" ++ name ++ ")" ++ genArgs z
+    y                    -> genType y ++ " " ++ name
 
