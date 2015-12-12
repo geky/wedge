@@ -4,6 +4,7 @@ import Data.List
 import Prelude hiding (lex)
 import Lex
 import Parse
+import Gen
 
 ext :: String -> FilePath -> FilePath
 ext new path = rawpath ++ "." ++ new
@@ -14,11 +15,15 @@ ext new path = rawpath ++ "." ++ new
       | otherwise           = path
 
 compile :: (FilePath, String) -> [(FilePath, String)]
-compile (file, input) = [
-    (ext "c" file, input),
-    (ext "h" file, input),
-    (ext "lex" file, show $ lex input),
-    (ext "parse" file, show $ parse $ lex input)]
+compile (file, input) =
+    [ (ext "lex" file, show lexed)
+    , (ext "parse" file, show parsed)
+    , (ext "h" file, gen "h" parsed)
+    , (ext "c" file, gen "c" parsed)
+    ]
+  where
+    lexed = lex input
+    parsed = parse lexed
 
 help :: String -> String
 help prog = "\

@@ -13,6 +13,10 @@ test: $(TARGET)
 	@echo ""
 	cat test.parse
 	@echo ""
+	cat test.h
+	@echo ""
+	cat test.c
+	@echo ""
 
 $(TARGET): $(SRC)
 	$(GG) $(GFLAGS) $^ -o $@
