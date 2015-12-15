@@ -1,6 +1,6 @@
 module Lex where
 
-import Prelude hiding (lex, repeat)
+import Prelude hiding (lex)
 import Data.Char
 import Rule
 import Control.Applicative
@@ -13,6 +13,7 @@ data Token
     | Int    { tint :: Int,         tline :: Line }
     | Float  { tfloat :: Double,    tline :: Line }
     | String { tstring :: String,   tline :: Line }
+    | Sep    {                      tline :: Line }
     | Term   {                      tline :: Line }
     | Token  { tt :: String,        tline :: Line }
 
@@ -21,8 +22,19 @@ instance Show Token where
     show Int{tint=int}          = "int " ++ show int
     show Float{tfloat=float}    = "float " ++ show float
     show String{tstring=string} = "string " ++ show string
+    show Sep{}                  = "sep"
     show Term{}                 = "term"
     show Token{tt=tok}          = show tok
+
+instance Eq Token where
+    Sym{tsym=a}       == Sym{tsym=b}       = a == b
+    Int{tint=a}       == Int{tint=b}       = a == b
+    Float{tfloat=a}   == Float{tfloat=b}   = a == b
+    String{tstring=a} == String{tstring=b} = a == b
+    Sep{}             == Sep{}             = True
+    Term{}            == Term{}            = True
+    Token{tt=a}       == Token{tt=b}       = True
+    _                 == _                 = False
 
 instance Unexpectable Token where
     line = tline . head
@@ -44,10 +56,15 @@ string = Rule $ \ts -> case ts of
     String{tstring=string}:ts -> Accept string ts
     ts                        -> Reject ts
 
+sep :: Rule Token ()
+sep = Rule $ \ts -> case ts of
+    Sep{}:ts -> Accept () ts
+    ts       -> Reject ts
+
 term :: Rule Token ()
 term = Rule $ \ts -> case ts of
     Term{}:ts -> Accept () ts
-    ts        -> Reject    ts
+    ts        -> Reject ts
 
 token :: String -> Rule Token ()
 token t = Rule $ \ts -> case ts of
@@ -79,24 +96,25 @@ tokFrac base = Rule $ \cs -> case span valid cs of
 
 tokInt :: Rule Char (Line -> Token)
 tokInt = Rule $ \cs -> case cs of
-    '0':b:cs | elem b "bB" -> Int <$> tokNum 2  `step` cs
-    '0':b:cs | elem b "oO" -> Int <$> tokNum 8  `step` cs
-    '0':b:cs | elem b "xX" -> Int <$> tokNum 16 `step` cs
-    cs                     -> Int <$> tokNum 10 `step` cs
+    '0':b:cs | elem b "bB" -> step (Int <$> tokNum 2)  cs
+    '0':b:cs | elem b "oO" -> step (Int <$> tokNum 8)  cs
+    '0':b:cs | elem b "xX" -> step (Int <$> tokNum 16) cs
+    cs                     -> step (Int <$> tokNum 10) cs
 
 tokFloat :: Rule Char (Line -> Token)
 tokFloat = Rule $ \cs -> case cs of
-    cs -> (\a b -> Float (fromIntegral a + b)) <$> tokNum 10 <* match '.' <*> tokFrac 10 `step` cs
+    cs -> step ((\a b -> Float (fromIntegral a + b)) <$> tokNum 10 <* match '.' <*> tokFrac 10) cs
 --(Float . (+) . fromIntegral) <$> tokNum 10 <* match '.' <*> tokFrac 10
 
 tokenize :: Rule Char (Line -> Token)
 tokenize = Rule $ \cs -> case cs of
     '-':'>':cs                 -> Accept (Token "->") cs
     c:cs     | elem c "(){}[]" -> Accept (Token [c]) cs
-    c:cs     | elem c ",;\n"   -> Accept Term cs
+    ',':cs                     -> Accept Sep cs
+    c:cs     | elem c ";\n"    -> Accept Term cs
     c:cs     | isSpace c       -> step tokenize cs
-    cs@(c:_) | isAlpha c       -> tokSym `step` cs
-    cs@(c:_) | isDigit c       -> tokFloat <|> tokInt `step` cs
+    cs@(c:_) | isAlpha c       -> step tokSym cs
+    cs@(c:_) | isDigit c       -> step (tokFloat <|> tokInt) cs
     cs                         -> Reject cs
 
 toklines :: Rule Char Line
@@ -107,6 +125,6 @@ toklines = Rule $ \cs -> case cs of
 lex :: String -> [Token]
 lex cs = zipWith ($) tokens lines
   where
-    tokens = run (repeat tokenize) cs
-    lines = scanl1 (+) $ run (repeat toklines) cs
+    tokens = run (many tokenize) cs
+    lines = scanl1 (+) $ run (many toklines) cs
 

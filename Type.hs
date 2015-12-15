@@ -10,7 +10,7 @@ data Type
   = Void
   | Type String
   | StructType [Type]
-  | ArrayType Type (Maybe Int)
+  | ArrayType Type Int
   | FuncType Type Type
   deriving Show
 
@@ -20,13 +20,13 @@ base :: Rule Token Type
 base = Rule $ \ts -> case ts of
     Sym{tsym="void"}:ts -> Accept Void ts
     Sym{tsym=sym}:ts    -> Accept (Type sym) ts
-    Token{tt="("}:ts    -> type_ <* token ")" `step` ts
+    Token{tt="("}:ts    -> step (type_ <* token ")") ts
     ts                  -> Reject ts
 
 func, array, struct :: Rule Token Type
 func   = FuncType <$> struct <* token "->" <*> struct
-array  = ArrayType <$> base <* token "[" <*> option int <* token "]"
-struct = tuple <$> delimit1 base term
+array  = ArrayType <$> base <* token "[" <*> int <* token "]"
+struct = tuple <$> delimit1 base sep
   where tuple [y] = y
         tuple ys  = StructType ys
 
@@ -46,20 +46,18 @@ emitMembers (StructType ys) =
 
 emitType :: Type -> String
 emitType y = case y of
-    Void                 -> "void"
-    Type "int"           -> "int"
-    Type "uint"          -> "unsigned"
-    Type "float"         -> "float"
-    Type t               -> t
-    StructType _         -> "struct " ++ emitMembers y
-    ArrayType y (Just n) -> emitType y ++ "[" ++ show n ++ "]"
-    ArrayType y _        -> emitType y ++ "[]"
-    FuncType y z         -> emitType z ++ " (*)" ++ emitArgs y
+    Void          -> "void"
+    Type "int"    -> "int"
+    Type "uint"   -> "unsigned"
+    Type "float"  -> "float"
+    Type t        -> t
+    StructType _  -> "struct " ++ emitMembers y
+    ArrayType y n -> emitType y ++ "[" ++ show n ++ "]"
+    FuncType y z  -> emitType z ++ " (*)" ++ emitArgs y
 
 emitTypeDecl :: Type -> String -> String
 emitTypeDecl y name = case y of
-    ArrayType y (Just n) -> emitType y ++ " " ++ name ++ "[" ++ show n ++ "]"
-    ArrayType y _        -> emitType y ++ " " ++ name ++ "[]"
-    FuncType y z         -> emitType z ++ " (*" ++ name ++ ")" ++ emitArgs y
-    y                    -> emitType y ++ " " ++ name
+    ArrayType y n -> emitType y ++ " " ++ name ++ "[" ++ show n ++ "]"
+    FuncType y z  -> emitType z ++ " (*" ++ name ++ ")" ++ emitArgs y
+    y             -> emitType y ++ " " ++ name
 

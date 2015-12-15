@@ -1,9 +1,8 @@
 module Rule where
 
-import Prelude hiding (repeat)
 import Control.Applicative
 import Data.Maybe
-import Data.List hiding (repeat)
+import Data.List
 
 
 -- Rule definition and operations
@@ -12,7 +11,6 @@ newtype Rule t a = Rule { step :: [t] -> Result t a }
 data Result t a = Accept a [t]
                 | Reject   [t]
 
-infixl 2 `step`
 
 instance Functor (Rule t) where
     fmap f r = Rule $ \ts -> case step r ts of
@@ -23,7 +21,7 @@ instance Applicative (Rule t) where
     pure a = Rule $ Accept a
 
     f <*> a = Rule $ \ts -> case step f ts of
-        Accept f ts -> f <$> a `step` ts
+        Accept f ts -> step (f <$> a) ts
         Reject ts   -> Reject ts
 
 instance Alternative (Rule t) where
@@ -34,31 +32,27 @@ instance Alternative (Rule t) where
         Reject _    -> step b ts
 
 
+-- many is already defined in Control.Applicative
+many1 :: Alternative f => f a -> f [a]
+many1 = some
+
+delimit, delimit1 :: Alternative f => f a -> f b -> f [a]
+delimit  r s = delimit1 r s <|> pure []
+delimit1 r s = (:) <$> r <*> many (s *> r)
+
+terminate, terminate1 :: Alternative f => f a -> f b -> f [a]
+terminate  r s = many  (r <* s)
+terminate1 r s = many1 (r <* s)
+
+separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
+separate  r s = many s *> delimit  r (many1 s) <* many s
+separate1 r s = many s *> delimit1 r (many1 s) <* many s
+
+
 look :: Rule t a -> Rule t a
 look r = Rule $ \ts -> case step r ts of
     Accept a _ -> Accept a ts
     Reject ts  -> Reject ts
-
-
-option :: Rule t a -> Rule t (Maybe a)
-option r = Just <$> r <|> pure Nothing
-
-repeat, repeat1 :: Rule t a -> Rule t [a]
-repeat  r = (:) <$> r <*> repeat r <|> pure []
-repeat1 r = (:) <$> r <*> repeat r
-
-delimit, delimit1 :: Rule t a -> Rule t b -> Rule t [a]
-delimit  r s = (:) <$> r <*> (s *> delimit r s <|> pure []) <|> pure []
-delimit1 r s = (:) <$> r <*> (s *> delimit r s <|> pure [])
-
-terminate, terminate1 :: Rule t a -> Rule t b -> Rule t [a]
-terminate  r s = repeat  (r <* s)
-terminate1 r s = repeat1 (r <* s)
-
-separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
-separate  r s = repeat s *> delimit  r (repeat1 s) <* repeat s
-separate1 r s = repeat s *> delimit1 r (repeat1 s) <* repeat s
-
 
 match :: Eq t => t -> Rule t t
 match t = Rule $ \ts -> case ts of

@@ -15,7 +15,7 @@ data PTree
 
 -- Parsing rules
 decl :: Rule Token PTree
-decl = Decl <$> type_ <*> sym
+decl = Decl <$> type_ <* many term <*> sym
 
 
 parse :: [Token] -> [PTree]
