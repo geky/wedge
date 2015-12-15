@@ -36,8 +36,8 @@ instance Alternative (Rule t) where
 
 look :: Rule t a -> Rule t a
 look r = Rule $ \ts -> case step r ts of
-    Accept a _  -> Accept a ts
-    Reject   ts -> Reject ts
+    Accept a _ -> Accept a ts
+    Reject ts  -> Reject ts
 
 
 option :: Rule t a -> Rule t (Maybe a)

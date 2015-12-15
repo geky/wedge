@@ -1,4 +1,4 @@
-TARGET = spoopy
+TARGET = wedge
 
 GG = ghc
 
@@ -8,7 +8,7 @@ SRC += $(wildcard *.hs)
 all: $(TARGET)
 
 test: $(TARGET)
-	./$(TARGET) test.sp
+	./$(TARGET) test.w
 	cat test.lex
 	@echo ""
 	cat test.parse

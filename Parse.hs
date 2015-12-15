@@ -21,3 +21,8 @@ decl = Decl <$> type_ <*> sym
 parse :: [Token] -> [PTree]
 parse = run $ separate decl term
 
+
+-- Emitting definitions
+emitPTree :: PTree -> String
+emitPTree (Decl y name) = emitTypeDecl y name ++ ";"
+

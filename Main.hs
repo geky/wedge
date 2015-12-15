@@ -4,12 +4,13 @@ import Data.List
 import Prelude hiding (lex)
 import Lex
 import Parse
-import Gen
+import Emit
+
 
 ext :: String -> FilePath -> FilePath
 ext new path = rawpath ++ "." ++ new
   where
-    old = ".sp"
+    old = ".w"
     rawpath
       | isSuffixOf old path = take (length path - length old) path
       | otherwise           = path
@@ -18,8 +19,8 @@ compile :: (FilePath, String) -> [(FilePath, String)]
 compile (file, input) =
     [ (ext "lex" file, show lexed)
     , (ext "parse" file, show parsed)
-    , (ext "h" file, gen "h" parsed)
-    , (ext "c" file, gen "c" parsed)
+    , (ext "h" file, emit "h" parsed)
+    , (ext "c" file, emit "c" parsed)
     ]
   where
     lexed = lex input
