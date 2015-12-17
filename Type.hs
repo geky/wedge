@@ -26,9 +26,10 @@ base = Rule $ \ts -> case ts of
 func, array, struct :: Rule Token Type
 func   = FuncType <$> struct <* token "->" <*> struct
 array  = ArrayType <$> base <* token "[" <*> int <* token "]"
-struct = tuple <$> delimit1 base sep
-  where tuple [y] = y
-        tuple ys  = StructType ys
+struct = tuple <$> delimited1 base (token ",")
+  where
+    tuple [y] = y
+    tuple ys  = StructType ys
 
 type_ :: Rule Token Type
 type_ = func <|> array <|> struct

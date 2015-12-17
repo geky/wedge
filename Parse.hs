@@ -19,7 +19,7 @@ decl = Decl <$> type_ <* many term <*> sym
 
 
 parse :: [Token] -> [PTree]
-parse = run $ separate decl term
+parse = run $ separated decl term
 
 
 -- Emitting definitions

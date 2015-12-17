@@ -31,22 +31,30 @@ instance Alternative (Rule t) where
         Accept a ts -> Accept a ts
         Reject _    -> step b ts
 
+instance Monad (Rule t) where
+    return = pure
+    fail _ = empty
+
+    a >>= b = Rule $ \ts -> case step a ts of
+        Accept a ts -> step (b a) ts
+        Reject ts   -> Reject ts
+
 
 -- many is already defined in Control.Applicative
 many1 :: Alternative f => f a -> f [a]
 many1 = some
 
-delimit, delimit1 :: Alternative f => f a -> f b -> f [a]
-delimit  r s = delimit1 r s <|> pure []
-delimit1 r s = (:) <$> r <*> many (s *> r)
+delimited, delimited1 :: Alternative f => f a -> f b -> f [a]
+delimited  r s = delimited1 r s <|> pure []
+delimited1 r s = (:) <$> r <*> many (s *> r)
 
-terminate, terminate1 :: Alternative f => f a -> f b -> f [a]
-terminate  r s = many  (r <* s)
-terminate1 r s = many1 (r <* s)
+terminated, terminated1 :: Alternative f => f a -> f b -> f [a]
+terminated  r s = many  (r <* s)
+terminated1 r s = many1 (r <* s)
 
-separate, separate1 :: Rule t a -> Rule t b -> Rule t [a]
-separate  r s = many s *> delimit  r (many1 s) <* many s
-separate1 r s = many s *> delimit1 r (many1 s) <* many s
+separated, separated1 :: Rule t a -> Rule t b -> Rule t [a]
+separated  r s = many s *> delimited  r (many1 s) <* many s
+separated1 r s = many s *> delimited1 r (many1 s) <* many s
 
 
 look :: Rule t a -> Rule t a
@@ -58,11 +66,6 @@ match :: Eq t => t -> Rule t t
 match t = Rule $ \ts -> case ts of
     (t':ts) | t == t' -> Accept t' ts
     ts                -> Reject ts
-
-matchN :: Eq t => [t] -> Rule t [t]
-matchN ts = Rule $ \ts' -> case ts' of
-    ts' | isPrefixOf ts ts' -> uncurry Accept $ splitAt (length ts) ts'
-    ts'                     -> Reject ts'
 
 matchIf :: (t -> Bool) -> Rule t t
 matchIf p = Rule $ \ts -> case ts of
@@ -78,16 +81,18 @@ matchMaybe f = Rule $ \ts -> case ts of
 -- Unexpectable typeclass used for reporting errors
 type Line = Int
 
-class (Show t) => Unexpectable t where
-    line :: [t] -> Line
+class Unexpectable t where
+    xline :: [t] -> Line
+    xshow :: [t] -> String
 
     unexpected :: [t] -> a
     unexpected ts = error $ "unexpected " ++ case ts of
-        (t:_) -> show t ++ " on line " ++ show (line ts + 1)
-        _     -> "end of input"
+        t:_ -> xshow ts ++ " on line " ++ show (xline ts + 1)
+        _   -> "end of input"
 
 instance Unexpectable Char where
-    line = length . filter (== '\n')
+    xline = length . filter (== '\n')
+    xshow = show . head
 
 
 run :: (Unexpectable t) => Rule t a -> [t] -> a

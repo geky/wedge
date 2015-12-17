@@ -13,7 +13,6 @@ data Token
     | Int    { tint :: Int,         tline :: Line }
     | Float  { tfloat :: Double,    tline :: Line }
     | String { tstring :: String,   tline :: Line }
-    | Sep    {                      tline :: Line }
     | Term   {                      tline :: Line }
     | Token  { tt :: String,        tline :: Line }
 
@@ -22,22 +21,12 @@ instance Show Token where
     show Int{tint=int}          = "int " ++ show int
     show Float{tfloat=float}    = "float " ++ show float
     show String{tstring=string} = "string " ++ show string
-    show Sep{}                  = "sep"
     show Term{}                 = "term"
     show Token{tt=tok}          = show tok
 
-instance Eq Token where
-    Sym{tsym=a}       == Sym{tsym=b}       = a == b
-    Int{tint=a}       == Int{tint=b}       = a == b
-    Float{tfloat=a}   == Float{tfloat=b}   = a == b
-    String{tstring=a} == String{tstring=b} = a == b
-    Sep{}             == Sep{}             = True
-    Term{}            == Term{}            = True
-    Token{tt=a}       == Token{tt=b}       = True
-    _                 == _                 = False
-
 instance Unexpectable Token where
-    line = tline . head
+    xline = tline . head
+    xshow = show . head
 
 
 -- Token matching rules
@@ -51,15 +40,14 @@ int = Rule $ \ts -> case ts of
     Int{tint=int}:ts -> Accept int ts
     ts               -> Reject ts
 
+float = Rule $ \ts -> case ts of
+    Float{tfloat=float}:ts -> Accept float ts
+    ts                     -> Reject ts
+
 string :: Rule Token String
 string = Rule $ \ts -> case ts of
     String{tstring=string}:ts -> Accept string ts
     ts                        -> Reject ts
-
-sep :: Rule Token ()
-sep = Rule $ \ts -> case ts of
-    Sep{}:ts -> Accept () ts
-    ts       -> Reject ts
 
 term :: Rule Token ()
 term = Rule $ \ts -> case ts of
@@ -78,49 +66,103 @@ tokSym = Rule $ \cs -> case span isAlphaNum cs of
     ("",  cs) -> Reject cs
     (sym, cs) -> Accept (Sym sym) cs
 
-tokNum :: Int -> Rule Char Int
-tokNum base = Rule $ \cs -> case span valid cs of
-    ("", cs) -> Reject cs
-    (ds, cs) -> Accept (foldr1 acc $ map digitToInt ds) cs
+tokDigit :: Real n => n -> Rule Char n
+tokDigit base = Rule $ \cs -> case cs of
+    c:cs | isBase c -> Accept (toBase c) cs
+    cs              -> Reject cs
   where
-    valid a = isDigit a && digitToInt a < base
-    acc a b = a + b*base
+    isBase c = isDigit c && toBase c < base
+    toBase = fromIntegral . digitToInt
 
-tokFrac :: Double -> Rule Char Double
-tokFrac base = Rule $ \cs -> case span valid cs of
-    ("", cs) -> Reject cs
-    (ds, cs) -> Accept ((/base) $ foldr1 acc $ map (fromIntegral . digitToInt) ds) cs
-  where
-    valid a = isDigit a && fromIntegral (digitToInt a) < base
-    acc a b = a + b/base
+tokBase :: Real n => Rule Char n
+tokBase = Rule $ \cs -> case cs of
+    '0':b:cs | elem b "bB" -> Accept 2  cs
+    '0':b:cs | elem b "oO" -> Accept 8  cs
+    '0':b:cs | elem b "xX" -> Accept 16 cs
+    cs                     -> Accept 10 cs
+
+tokExp :: Real n => Rule Char n
+tokExp = Rule $ \cs -> case cs of
+    c:cs | elem c "eE" -> Accept 10 cs
+    c:cs | elem c "pP" -> Accept 2 cs
+    cs                 -> Reject cs
+
+tokIntPart :: Real n => n -> Rule Char n
+tokIntPart base = toInt <$> many1 (tokDigit base)
+  where toInt = foldr1 (\a b -> a + b*base)
+
+tokFracPart :: RealFrac n => n -> Rule Char n
+tokFracPart base = toFrac <$ match '.' <*> many1 (tokDigit base)
+  where toFrac = (/base) . foldr1 (\a b -> a + b/base)
+
+tokExpPart :: RealFrac n => Rule Char n
+tokExpPart = (^) <$> tokExp <*> tokIntPart 10 <|> pure 1
 
 tokInt :: Rule Char (Line -> Token)
-tokInt = Rule $ \cs -> case cs of
-    '0':b:cs | elem b "bB" -> step (Int <$> tokNum 2)  cs
-    '0':b:cs | elem b "oO" -> step (Int <$> tokNum 8)  cs
-    '0':b:cs | elem b "xX" -> step (Int <$> tokNum 16) cs
-    cs                     -> step (Int <$> tokNum 10) cs
+tokInt = Int <$> (tokBase >>= tokIntPart)
 
 tokFloat :: Rule Char (Line -> Token)
-tokFloat = Rule $ \cs -> case cs of
-    cs -> step ((\a b -> Float (fromIntegral a + b)) <$> tokNum 10 <* match '.' <*> tokFrac 10) cs
---(Float . (+) . fromIntegral) <$> tokNum 10 <* match '.' <*> tokFrac 10
+tokFloat = Float <$> do
+    base <- tokBase
+    int  <- tokIntPart base
+    frac <- tokFracPart base
+    exp  <- tokExpPart
+    return $ (int + frac) * exp
+
+tokEscape :: Int -> Int -> Rule Char Char
+tokEscape base count = toChar <$> (sequence $ replicate count $ tokDigit base)
+  where toChar = chr . foldr1 (\a b -> a + b*base)
+
+tokCharPart :: Char -> Rule Char Char
+tokCharPart q = Rule $ \cs -> case cs of
+    '\\':'\\':cs  -> Accept '\\' cs
+    '\\':'\'':cs  -> Accept '\'' cs
+    '\\':'\"':cs  -> Accept '\"' cs
+    '\\':'f':cs   -> Accept '\f' cs
+    '\\':'n':cs   -> Accept '\n' cs
+    '\\':'r':cs   -> Accept '\r' cs
+    '\\':'t':cs   -> Accept '\t' cs
+    '\\':'v':cs   -> Accept '\v' cs
+    '\\':'0':cs   -> Accept '\0' cs
+    '\\':'b':cs   -> step (tokEscape  2 8) cs
+    '\\':'o':cs   -> step (tokEscape  8 3) cs
+    '\\':'d':cs   -> step (tokEscape 10 3) cs
+    '\\':'x':cs   -> step (tokEscape 16 2) cs
+    '\\':_        -> Reject cs
+    '\n':_        -> Reject cs
+    c:cs | c /= q -> Accept c cs
+    cs            -> Reject cs
+
+tokChar :: Rule Char (Line -> Token)
+tokChar = (Int . ord) <$ match '\'' <*> tokCharPart '\'' <* match '\''
+
+tokString :: Rule Char (Line -> Token)
+tokString = String <$ match '\"' <*> many (tokCharPart '\"') <* match '\"'
+
 
 tokenize :: Rule Char (Line -> Token)
 tokenize = Rule $ \cs -> case cs of
-    '-':'>':cs                 -> Accept (Token "->") cs
-    c:cs     | elem c "(){}[]" -> Accept (Token [c]) cs
-    ',':cs                     -> Accept Sep cs
-    c:cs     | elem c ";\n"    -> Accept Term cs
-    c:cs     | isSpace c       -> step tokenize cs
-    cs@(c:_) | isAlpha c       -> step tokSym cs
-    cs@(c:_) | isDigit c       -> step (tokFloat <|> tokInt) cs
-    cs                         -> Reject cs
+    '-':'>':cs          -> Accept (Token "->") cs
+    '(':cs              -> Accept (Token "(") cs
+    ')':cs              -> Accept (Token ")") cs
+    '{':cs              -> Accept (Token "{") cs
+    '}':cs              -> Accept (Token "}") cs
+    '[':cs              -> Accept (Token "[") cs
+    ']':cs              -> Accept (Token "]") cs
+    ',':cs              -> Accept (Token ",") cs
+    c:cs | elem c ";\n" -> Accept Term cs
+    c:cs | isSpace c    -> step tokenize cs
+    c:_  | isAlpha c    -> step tokSym cs
+    c:_  | isDigit c    -> step (tokFloat <|> tokInt) cs
+    '\'':_              -> step tokChar cs
+    '\"':_              -> step tokString cs
+    cs                  -> Reject cs
 
 toklines :: Rule Char Line
 toklines = Rule $ \cs -> case cs of
     '\n':cs -> Accept 1 cs
     cs      -> step (0 <$ tokenize) cs
+
 
 lex :: String -> [Token]
 lex cs = zipWith ($) tokens lines
