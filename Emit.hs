@@ -4,6 +4,6 @@ import Parse
 
 
 emit :: String -> [PTree] -> String
-emit "h" = concat . map ((++"\n") . emitPTree)
-emit "c" = concat . map ((++"\n") . emitPTree)
+emit "h" = unlines . emitTree
+emit "c" = unlines . emitTree
 
