@@ -17,7 +17,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable wedge
-  ghc-options:         -Wall
+  ghc-options:         -W
   default-extensions:  LambdaCase
   main-is:             Main.hs
   other-modules:     Emit, Lex, Parse, Rule, Type

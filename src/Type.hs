@@ -53,12 +53,12 @@ var = func <|> array <|> ((,) <$> type_ <*> sym)
 emitArgs :: Type -> String
 emitArgs y = (\s -> "(" ++ s ++ ")") $ case y of
     StructType ys -> intercalate ", " $ map emitType ys
-    y'            -> emitType y'
+    y             -> emitType y
 
 emitMembers :: Type -> String
-emitMembers (StructType ys) =
+emitMembers y = 
     (\s -> "{" ++ s ++ "}") $ intercalate " " $ map ((++";") . emitType) ys
-emitMembers _ = undefined
+  where StructType ys = y
 
 emitType :: Type -> String
 emitType = \case
@@ -72,7 +72,7 @@ emitType = \case
     FuncType y z     -> emitType y ++ " (*)" ++ emitArgs z
 
 emitTypeDecl :: Type -> String -> String
-emitTypeDecl = flip $ \name -> \case
+emitTypeDecl y name = case y of
     ArrayType y n -> emitType y ++ " " ++ name ++ "[" ++ show n ++ "]"
     FuncType y z  -> emitType y ++ " (*" ++ name ++ ")" ++ emitArgs z
     y             -> emitType y ++ " " ++ name

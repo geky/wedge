@@ -7,4 +7,3 @@ emit :: String -> [PTree] -> String
 emit "h" = unlines . emitTree
 emit "c" = unlines . emitTree
 emit _   = undefined
-

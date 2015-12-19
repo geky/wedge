@@ -38,13 +38,13 @@ stmt :: Rule Token PTree
 stmt = decl <|> Expr <$> expr
 
 expr :: Rule Token Expr
-expr = call <|> intlit <|> floatlit <|> stringlit <|> var_
+expr = call <|> intlit <|> floatlit <|> stringlit <|> var
   where
     intlit    = IntLit <$> int
     floatlit  = FloatLit <$> float
     stringlit = StringLit <$> string
-    var_ = Var <$> sym
-    call = Call <$> var_ <* token "(" <*> args <* token ")"
+    var = Var <$> sym
+    call = Call <$> var <* token "(" <*> args <* token ")"
       where args = delimited expr (token ",")
     
     
@@ -56,18 +56,18 @@ parse = run $ separated decl term
 
 -- Emitting definitions
 emitTree :: [PTree] -> [String]
-emitTree = (concat .) $ map $ \p -> case p of
+emitTree = (concat .) $ map $ \case
     Decl y name       -> pure $ emitTypeDecl y name ++ ";"
     FuncDecl y name b -> emitFunc y name b
     Expr e            -> pure $ emitExpr e ++ ";"
 
 emitFunc :: Type -> String -> [PTree] -> [String]
-emitFunc (FuncType y z) name b = pure prefix ++ b' ++ pure suffix
+emitFunc f name block = pure prefix ++ block' ++ pure suffix
   where
+    FuncType y z = f
     prefix = emitType y ++ " " ++ name ++ emitArgs z ++ " {"
-    b' = map (replicate 4 ' ' ++) $ emitTree b
+    block' = map (replicate 4 ' ' ++) $ emitTree block
     suffix = "}"
-emitFunc _ _ _ = undefined
 
 emitExpr :: Expr -> String
 emitExpr = \case

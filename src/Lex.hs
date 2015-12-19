@@ -63,8 +63,8 @@ token t = Rule $ \case
 -- Tokenizing rules
 tokSym :: Rule Char (Line -> Token)
 tokSym = Rule $ \cs -> case span isAlphaNum cs of
-    ("", cs') -> Reject cs'
-    (s,  cs') -> Accept (Sym s) cs'
+    ("", cs) -> Reject cs
+    (s,  cs) -> Accept (Sym s) cs
 
 tokDigit :: Real n => n -> Rule Char n
 tokDigit base = Rule $ \case
@@ -91,12 +91,12 @@ tokIntPart :: Real n => n -> Rule Char n
 tokIntPart base = toInt <$> many1 (tokDigit base)
   where toInt = foldr1 (\a b -> a + b*base)
 
-tokFracPart :: RealFloat n => n -> Rule Char n
+tokFracPart :: RealFrac n => n -> Rule Char n
 tokFracPart base = toFrac <$ match '.' <*> many1 (tokDigit base)
   where toFrac = (/base) . foldr1 (\a b -> a + b/base)
 
-tokExpPart :: RealFloat n => Rule Char n
-tokExpPart = (**) <$> tokExp <*> tokIntPart 10 <|> pure 1
+tokExpPart :: RealFrac n => Rule Char n
+tokExpPart = (^^) <$> tokExp <*> tokIntPart 10
 
 tokInt :: Rule Char (Line -> Token)
 tokInt = Int <$> (tokBase >>= tokIntPart)
@@ -104,10 +104,10 @@ tokInt = Int <$> (tokBase >>= tokIntPart)
 tokFloat :: Rule Char (Line -> Token)
 tokFloat = Float <$> do
     base <- tokBase
-    int_ <- tokIntPart base
+    int  <- tokIntPart base
     frac <- tokFracPart base
-    exp_ <- tokExpPart
-    return $ (int_ + frac) * exp_
+    exp  <- tokExpPart <|> pure 1
+    return $ (int + frac) * exp
 
 tokEscape :: Int -> Int -> Rule Char Char
 tokEscape base count = toChar <$> (sequence $ replicate count $ tokDigit base)
@@ -165,8 +165,8 @@ toklines = Rule $ \case
 
 
 lex :: String -> [Token]
-lex cs = zipWith ($) tokens lines_
+lex cs = zipWith ($) tokens lines
   where
     tokens = run (many tokenize) cs
-    lines_ = scanl1 (+) $ run (many toklines) cs
+    lines = scanl1 (+) $ run (many toklines) cs
 

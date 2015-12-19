@@ -13,30 +13,30 @@ data Result t a = Accept a [t]
 
 instance Functor (Rule t) where
     fmap f r = Rule $ \ts -> case step r ts of
-        Accept a ts' -> Accept (f a) ts'
-        Reject ts'   -> Reject ts'
+        Accept a ts -> Accept (f a) ts
+        Reject ts   -> Reject ts
 
 instance Applicative (Rule t) where
     pure a = Rule $ Accept a
 
     f <*> a = Rule $ \ts -> case step f ts of
-        Accept f' ts' -> step (f' <$> a) ts'
-        Reject ts'   -> Reject ts'
+        Accept f ts -> step (f <$> a) ts
+        Reject ts   -> Reject ts
 
 instance Alternative (Rule t) where
     empty = Rule Reject
 
     a <|> b = Rule $ \ts -> case step a ts of
-        Accept a' ts' -> Accept a' ts'
-        Reject _      -> step b ts
+        Accept a ts -> Accept a ts
+        Reject _    -> step b ts
 
 instance Monad (Rule t) where
     return = pure
     fail _ = empty
 
     a >>= b = Rule $ \ts -> case step a ts of
-        Accept a' ts' -> step (b a') ts'
-        Reject ts'    -> Reject ts'
+        Accept a ts -> step (b a) ts
+        Reject ts   -> Reject ts
 
 
 -- many is already defined in Control.Applicative
@@ -96,9 +96,9 @@ instance Unexpectable Char where
 
 run :: (Unexpectable t) => Rule t a -> [t] -> a
 run r ts = case step r ts of
-    Accept a []  -> a
-    Accept _ ts' -> unexpected $ handled ts'
-    Reject   ts' -> unexpected $ handled ts'
+    Accept a [] -> a
+    Accept _ ts -> unexpected $ handled ts
+    Reject   ts -> unexpected $ handled ts
   where
     handled ts' = reverse $ take (length ts - length ts' + 1) ts
 
