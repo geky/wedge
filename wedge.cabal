@@ -16,9 +16,11 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
-library
+executable wedge
+  ghc-options:         -Wall
   default-extensions:  LambdaCase
-  exposed-modules:     Emit, Lex, Main, Parse, Rule, Type
+  main-is:             Main.hs
+  other-modules:     Emit, Lex, Parse, Rule, Type
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.8 && <4.9
