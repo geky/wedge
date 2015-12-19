@@ -17,11 +17,11 @@ data Type
 
 -- Type rules
 base :: Rule Token Type
-base = Rule $ \ts -> case ts of
-    Sym{tsym="void"}:ts -> Accept Void ts
-    Sym{tsym=sym}:ts    -> Accept (Type sym) ts
-    Token{tt="("}:ts    -> step (type_ <* token ")") ts
-    ts                  -> Reject ts
+base = Rule $ \case
+    Sym{tsym="void"}:ts  -> Accept Void ts
+    Sym{tsym=s}:ts       -> Accept (Type s) ts
+    Token{ttoken="("}:ts -> step (type_ <* token ")") ts
+    ts                   -> Reject ts
 
 struct :: Rule Token Type
 struct = toStruct <$> delimited1 base (token ",")
@@ -53,25 +53,26 @@ var = func <|> array <|> ((,) <$> type_ <*> sym)
 emitArgs :: Type -> String
 emitArgs y = (\s -> "(" ++ s ++ ")") $ case y of
     StructType ys -> intercalate ", " $ map emitType ys
-    y             -> emitType y
+    y'            -> emitType y'
 
 emitMembers :: Type -> String
 emitMembers (StructType ys) =
     (\s -> "{" ++ s ++ "}") $ intercalate " " $ map ((++";") . emitType) ys
+emitMembers _ = undefined
 
 emitType :: Type -> String
-emitType y = case y of
-    Void          -> "void"
-    Type "int"    -> "int"
-    Type "uint"   -> "unsigned"
-    Type "float"  -> "float"
-    Type t        -> t
-    StructType _  -> "struct " ++ emitMembers y
-    ArrayType y n -> emitType y ++ "[" ++ show n ++ "]"
-    FuncType y z  -> emitType y ++ " (*)" ++ emitArgs z
+emitType = \case
+    Void             -> "void"
+    Type "int"       -> "int"
+    Type "uint"      -> "unsigned"
+    Type "float"     -> "float"
+    Type t           -> t
+    y@(StructType _) -> "struct " ++ emitMembers y
+    ArrayType y n    -> emitType y ++ "[" ++ show n ++ "]"
+    FuncType y z     -> emitType y ++ " (*)" ++ emitArgs z
 
 emitTypeDecl :: Type -> String -> String
-emitTypeDecl y name = case y of
+emitTypeDecl = flip $ \name -> \case
     ArrayType y n -> emitType y ++ " " ++ name ++ "[" ++ show n ++ "]"
     FuncType y z  -> emitType y ++ " (*" ++ name ++ ")" ++ emitArgs z
     y             -> emitType y ++ " " ++ name

@@ -2,7 +2,6 @@ module Rule where
 
 import Control.Applicative
 import Data.Maybe
-import Data.List
 
 
 -- Rule definition and operations
@@ -14,30 +13,30 @@ data Result t a = Accept a [t]
 
 instance Functor (Rule t) where
     fmap f r = Rule $ \ts -> case step r ts of
-        Accept a ts -> Accept (f a) ts
-        Reject ts   -> Reject ts
+        Accept a ts' -> Accept (f a) ts'
+        Reject ts'   -> Reject ts'
 
 instance Applicative (Rule t) where
     pure a = Rule $ Accept a
 
     f <*> a = Rule $ \ts -> case step f ts of
-        Accept f ts -> step (f <$> a) ts
-        Reject ts   -> Reject ts
+        Accept f' ts' -> step (f' <$> a) ts'
+        Reject ts'   -> Reject ts'
 
 instance Alternative (Rule t) where
     empty = Rule Reject
 
     a <|> b = Rule $ \ts -> case step a ts of
-        Accept a ts -> Accept a ts
-        Reject _    -> step b ts
+        Accept a' ts' -> Accept a' ts'
+        Reject _      -> step b ts
 
 instance Monad (Rule t) where
     return = pure
     fail _ = empty
 
     a >>= b = Rule $ \ts -> case step a ts of
-        Accept a ts -> step (b a) ts
-        Reject ts   -> Reject ts
+        Accept a' ts' -> step (b a') ts'
+        Reject ts'    -> Reject ts'
 
 
 -- many is already defined in Control.Applicative
@@ -52,7 +51,7 @@ terminated, terminated1 :: Alternative f => f a -> f b -> f [a]
 terminated  r s = many  (r <* s)
 terminated1 r s = many1 (r <* s)
 
-separated, separated1 :: Rule t a -> Rule t b -> Rule t [a]
+separated, separated1 :: Alternative f => f a -> f b -> f [a]
 separated  r s = many s *> delimited  r (many1 s) <* many s
 separated1 r s = many s *> delimited1 r (many1 s) <* many s
 
@@ -60,20 +59,20 @@ separated1 r s = many s *> delimited1 r (many1 s) <* many s
 look :: Rule t a -> Rule t a
 look r = Rule $ \ts -> case step r ts of
     Accept a _ -> Accept a ts
-    Reject ts  -> Reject ts
+    Reject _   -> Reject ts
 
 match :: Eq t => t -> Rule t t
-match t = Rule $ \ts -> case ts of
+match t = Rule $ \case
     (t':ts) | t == t' -> Accept t' ts
     ts                -> Reject ts
 
 matchIf :: (t -> Bool) -> Rule t t
-matchIf p = Rule $ \ts -> case ts of
+matchIf p = Rule $ \case
     (t:ts) | p t -> Accept t ts
     ts           -> Reject ts
 
 matchMaybe :: (t -> Maybe a) -> Rule t a
-matchMaybe f = Rule $ \ts -> case ts of
+matchMaybe f = Rule $ \case
     (t:ts) | isJust (f t) -> Accept (fromJust (f t)) ts
     ts                    -> Reject ts
 
@@ -87,8 +86,8 @@ class Unexpectable t where
 
     unexpected :: [t] -> a
     unexpected ts = error $ "unexpected " ++ case ts of
-        t:_ -> xshow ts ++ " on line " ++ show (xline ts + 1)
-        _   -> "end of input"
+        [] -> "end of input"
+        _  -> xshow ts ++ " on line " ++ show (xline ts + 1)
 
 instance Unexpectable Char where
     xline = length . filter (== '\n')
@@ -97,9 +96,9 @@ instance Unexpectable Char where
 
 run :: (Unexpectable t) => Rule t a -> [t] -> a
 run r ts = case step r ts of
-    Accept a [] -> a
-    Accept _ ts -> unexpected $ handled ts
-    Reject   ts -> unexpected $ handled ts
+    Accept a []  -> a
+    Accept _ ts' -> unexpected $ handled ts'
+    Reject   ts' -> unexpected $ handled ts'
   where
     handled ts' = reverse $ take (length ts - length ts' + 1) ts
 
