@@ -2,6 +2,7 @@
 import System.Environment
 import Data.List
 import Prelude hiding (lex)
+import Rule
 import Lex
 import Parse
 import Emit
@@ -17,8 +18,8 @@ ext new path = rawpath ++ "." ++ new
 
 compile :: (FilePath, String) -> [(FilePath, String)]
 compile (file, input) =
-    [ (ext "lex" file, show lexed)
-    , (ext "parse" file, show parsed)
+    [ (ext "lex" file, unlines $ map show $ xlines lexed)
+    , (ext "parse" file, unlines $ map show $ xlines parsed)
     , (ext "h" file, emit "h" parsed)
     , (ext "c" file, emit "c" parsed)
     ]

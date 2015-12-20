@@ -177,7 +177,7 @@ tokLines = Rule $ \case
 
 
 lex :: String -> [Token]
-lex cs = zipWith ($) tokens lines
+lex cs = zipWith ($) tokens (0:lines)
   where
     tokens = run (many tokenize) cs
     lines = scanl1 (+) $ run (many tokLines) cs

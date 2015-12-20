@@ -23,6 +23,10 @@ data PTree
     | Expr Expr
     deriving Show
 
+instance Unexpectable PTree where
+    xline = subtract 1 . length
+    xshow = show . head
+
 
 -- Parsing rules
 pDecl :: Rule Token PTree

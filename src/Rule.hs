@@ -84,6 +84,15 @@ class Unexpectable t where
     xline :: [t] -> Line
     xshow :: [t] -> String
 
+    xlines :: [t] -> [[t]]
+    xlines = xlines' 0 []
+      where
+        xlines' :: Unexpectable t => Line -> [t] -> [t] -> [[t]]
+        xlines' _ _ []                         = [[]]
+        xlines' c r ts@(t:_) | xline (t:r) > c = [] : xlines' (c+1) r ts
+        xlines' c r (t:ts)                     = (t:l) : ls
+          where l:ls = xlines' c (t:r) ts
+
     unexpected :: [t] -> a
     unexpected ts = error $ "unexpected " ++ case ts of
         [] -> "end of input"
