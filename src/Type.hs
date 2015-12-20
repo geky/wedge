@@ -16,35 +16,35 @@ data Type
 
 
 -- Type rules
-base :: Rule Token Type
-base = Rule $ \case
-    Sym{tsym="void"}:ts  -> Accept Void ts
-    Sym{tsym=s}:ts       -> Accept (Type s) ts
-    Token{ttoken="("}:ts -> step (type_ <* token ")") ts
-    ts                   -> Reject ts
+pBase :: Rule Token Type
+pBase = Rule $ \case
+    Symbol{tsymbol="void"}:ts -> Accept Void ts
+    Symbol{tsymbol=s}:ts      -> Accept (Type s) ts
+    ts@(Token{ttoken="("}:_)  -> step (paren pType) ts
+    ts                        -> Reject ts
 
-struct :: Rule Token Type
-struct = toStruct <$> delimited1 base (token ",")
+pStruct :: Rule Token Type
+pStruct = toStruct <$> delimited1 pBase (token ",")
   where
     toStruct [y] = y
     toStruct ys  = StructType ys
 
-type_ :: Rule Token Type
-type_ = func <|> array <|> struct
+pType :: Rule Token Type
+pType = func <|> array <|> pStruct
   where
-    func  = FuncType  <$> struct <* token "(" <*> struct <* token ")"
-    array = ArrayType <$> struct <* token "[" <*> int    <* token "]"
+    func  = FuncType  <$> pStruct <*> paren pStruct
+    array = ArrayType <$> pStruct <*> brace int
 
 -- TODO fold this into another function?
-funcVar :: Rule Token (Type, String)
-funcVar = toFunc <$> type_ <*> sym <* token "(" <*> type_ <* token ")"
+pFuncVar :: Rule Token (Type, String)
+pFuncVar = toFunc <$> pType <*> symbol <*> paren pType
   where toFunc ret name arg = (FuncType ret arg, name)
 
-var :: Rule Token (Type, String)
-var = func <|> array <|> ((,) <$> type_ <*> sym)
+pVar :: Rule Token (Type, String)
+pVar = func <|> array <|> ((,) <$> pType <*> symbol)
   where
-    func  = toFunc  <$> type_ <*> sym <* token "(" <*> type_ <* token ")"
-    array = toArray <$> type_ <*> sym <* token "[" <*> int   <* token "]"
+    func  = toFunc  <$> pType <*> symbol <*> paren pType
+    array = toArray <$> pType <*> symbol <*> brace int
     toFunc  ret name arg   = (FuncType ret arg, name)
     toArray ret name count = (ArrayType ret count, name)
 

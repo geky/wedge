@@ -25,33 +25,33 @@ data PTree
 
 
 -- Parsing rules
-decl :: Rule Token PTree
-decl = func <|> (uncurry Decl <$> var)
+pDecl :: Rule Token PTree
+pDecl = pFunc <|> (uncurry Decl <$> pVar)
 
-func :: Rule Token PTree
-func = uncurry FuncDecl <$> funcVar <*> block
+pFunc :: Rule Token PTree
+pFunc = uncurry FuncDecl <$> pFuncVar <*> pBlock
 
-block :: Rule Token [PTree]
-block = token "{" *> separated stmt term <* token "}"
+pBlock :: Rule Token [PTree]
+pBlock = bracket $ separated pStmt term
 
-stmt :: Rule Token PTree
-stmt = decl <|> Expr <$> expr
+pStmt :: Rule Token PTree
+pStmt = pDecl <|> Expr <$> pExpr
 
-expr :: Rule Token Expr
-expr = call <|> intlit <|> floatlit <|> stringlit <|> var
+pExpr :: Rule Token Expr
+pExpr = call <|> pInt <|> pFloat <|> pString <|> pVar
   where
-    intlit    = IntLit <$> int
-    floatlit  = FloatLit <$> float
-    stringlit = StringLit <$> string
-    var = Var <$> sym
-    call = Call <$> var <* token "(" <*> args <* token ")"
-      where args = delimited expr (token ",")
+    pInt    = IntLit <$> int
+    pFloat  = FloatLit <$> float
+    pString = StringLit <$> string
+    pVar = Var <$> symbol
+    call = Call <$> pVar <*> paren args
+      where args = delimited pExpr (token ",")
     
     
 
 
 parse :: [Token] -> [PTree]
-parse = run $ separated decl term
+parse = run $ separated pDecl term
 
 
 -- Emitting definitions

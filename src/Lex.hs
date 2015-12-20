@@ -8,15 +8,15 @@ import Control.Applicative
 
 -- Token definitions
 data Token
-    = Sym    { tsym :: String,      tline :: Line }
-    | Int    { tint :: Int,         tline :: Line }
-    | Float  { tfloat :: Double,    tline :: Line }
+    = Symbol { tsymbol :: String,   tline :: Line }
+    | Int    { tint    :: Int,      tline :: Line }
+    | Float  { tfloat  :: Double,   tline :: Line }
     | String { tstring :: String,   tline :: Line }
     | Term   {                      tline :: Line }
-    | Token  { ttoken :: String,    tline :: Line }
+    | Token  { ttoken  :: String,   tline :: Line }
 
 instance Show Token where
-    show Sym{tsym=s}       = "symbol " ++ show s
+    show Symbol{tsymbol=s} = "symbol " ++ show s
     show Int{tint=i}       = "int " ++ show i
     show Float{tfloat=f}   = "float " ++ show f
     show String{tstring=s} = "string " ++ show s
@@ -29,10 +29,10 @@ instance Unexpectable Token where
 
 
 -- Token matching rules
-sym :: Rule Token String
-sym = Rule $ \case
-    Sym{tsym=s}:ts -> Accept s ts
-    ts             -> Reject ts
+symbol :: Rule Token String
+symbol = Rule $ \case
+    Symbol{tsymbol=s}:ts -> Accept s ts
+    ts                   -> Reject ts
 
 int :: Rule Token Int
 int = Rule $ \case
@@ -59,25 +59,33 @@ token t = Rule $ \case
     Token{ttoken=t'}:ts | t == t' -> Accept () ts
     ts                            -> Reject ts
 
+-- More complex token matching
+paren, brace, bracket :: Rule Token a -> Rule Token a
+paren   r = token "(" *> r <* token ")"
+brace   r = token "[" *> r <* token "]"
+bracket r = token "{" *> r <* token "}"
+
 
 -- Tokenizing rules
 tokSym :: Rule Char (Line -> Token)
-tokSym = Rule $ \cs -> case span isAlphaNum cs of
-    ("", cs) -> Reject cs
-    (s,  cs) -> Accept (Sym s) cs
+tokSym = Symbol <$> many1 (matchIf isAlphaNum)
 
 tokDigit :: Real n => n -> Rule Char n
-tokDigit base = Rule $ \case
-    c:cs | isBase c -> Accept (toBase c) cs
-    cs              -> Reject cs
+tokDigit base = toBase <$> matchIf isBase
   where
     isBase c = isDigit c && toBase c < base
     toBase = fromIntegral . digitToInt
 
+tokSign :: Real n => Rule Char (n -> n)
+tokSign = Rule $ \case
+    '-':cs -> Accept negate cs
+    '+':cs -> Accept id cs
+    cs     -> Accept id cs
+
 tokBase :: Real n => Rule Char n
 tokBase = Rule $ \case
-    '0':b:cs | elem b "bB" -> Accept 2  cs
-    '0':b:cs | elem b "oO" -> Accept 8  cs
+    '0':b:cs | elem b "bB" -> Accept 2 cs
+    '0':b:cs | elem b "oO" -> Accept 8 cs
     '0':b:cs | elem b "xX" -> Accept 16 cs
     cs                     -> Accept 10 cs
 
@@ -96,18 +104,23 @@ tokFracPart base = toFrac <$ match '.' <*> many1 (tokDigit base)
   where toFrac = (/base) . foldr1 (\a b -> a + b/base)
 
 tokExpPart :: RealFrac n => Rule Char n
-tokExpPart = (^^) <$> tokExp <*> tokIntPart 10
+tokExpPart = (^^) <$> tokExp <*> (tokSign <*> tokIntPart 10)
 
 tokInt :: Rule Char (Line -> Token)
-tokInt = Int <$> (tokBase >>= tokIntPart)
+tokInt = Int <$> do
+    sign <- tokSign
+    base <- tokBase
+    int  <- tokIntPart base
+    return $ sign int
 
 tokFloat :: Rule Char (Line -> Token)
 tokFloat = Float <$> do
+    sign <- tokSign
     base <- tokBase
     int  <- tokIntPart base
     frac <- tokFracPart base
     exp  <- tokExpPart <|> pure 1
-    return $ (int + frac) * exp
+    return $ sign ((int + frac) * exp)
 
 tokEscape :: Int -> Int -> Rule Char Char
 tokEscape base count = toChar <$> (sequence $ replicate count $ tokDigit base)
@@ -142,7 +155,6 @@ tokString = String <$ match '\"' <*> many (tokCharPart '\"') <* match '\"'
 
 tokenize :: Rule Char (Line -> Token)
 tokenize = Rule $ \case
-    '-':'>':cs              -> Accept (Token "->") cs
     '(':cs                  -> Accept (Token "(") cs
     ')':cs                  -> Accept (Token ")") cs
     '{':cs                  -> Accept (Token "{") cs
@@ -158,8 +170,8 @@ tokenize = Rule $ \case
     cs@('\"':_)             -> step tokString cs
     cs                      -> Reject cs
 
-toklines :: Rule Char Line
-toklines = Rule $ \case
+tokLines :: Rule Char Line
+tokLines = Rule $ \case
     '\n':cs -> Accept 1 cs
     cs      -> step (0 <$ tokenize) cs
 
@@ -168,5 +180,5 @@ lex :: String -> [Token]
 lex cs = zipWith ($) tokens lines
   where
     tokens = run (many tokenize) cs
-    lines = scanl1 (+) $ run (many toklines) cs
+    lines = scanl1 (+) $ run (many tokLines) cs
 

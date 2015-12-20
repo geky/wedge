@@ -5,11 +5,11 @@ name:                wedge
 version:             0.1.0.0
 synopsis:            Wedge language
 -- description:         
-homepage:            https://github.com/geky/wedge
-license:             GPL-2
-license-file:        LICENSE
+homepage:            https://github.com/wedge-lang/wedge
+-- license:             GPL-2
+-- license-file:        LICENSE
 author:              Chris Haster
-maintainer:          theotherjimmy@gmail.com
+maintainer:          chaster@utexas.edu, theotherjimmy@gmail.com
 -- copyright:           
 category:            Language
 build-type:          Simple
@@ -20,7 +20,7 @@ executable wedge
   ghc-options:         -W
   default-extensions:  LambdaCase
   main-is:             Main.hs
-  other-modules:     Emit, Lex, Parse, Rule, Type
+  other-modules:       Emit, Lex, Parse, Rule, Type
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.8 && <4.9
