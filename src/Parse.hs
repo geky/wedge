@@ -18,28 +18,29 @@ data Expr
     deriving Show
 
 data PTree
-    = Decl Type String
+    = Decl Var
     | FuncDecl Type String [PTree]
     | Expr Expr
     deriving Show
 
 instance Unexpectable PTree where
-    xline = subtract 1 . length
+    xline = pred . length
     xshow = show . head
 
 
 -- Parsing rules
 pDecl :: Rule Token PTree
-pDecl = pFunc <|> (uncurry Decl <$> pVar)
+pDecl = pFunc <|> Decl <$> pVar
 
 pFunc :: Rule Token PTree
-pFunc = uncurry FuncDecl <$> pFuncVar <*> pBlock
+pFunc = toFunc <$> pType <*> symbol <*> pFuncSuffix <*> pBlock
+  where toFunc base name suff block = FuncDecl (suff base) name block
 
 pBlock :: Rule Token [PTree]
 pBlock = bracket $ separated pStmt term
 
 pStmt :: Rule Token PTree
-pStmt = pDecl <|> Expr <$> pExpr
+pStmt = pDecl <* look (term <|> token "}")  <|> Expr <$> pExpr
 
 pExpr :: Rule Token Expr
 pExpr = call <|> pInt <|> pFloat <|> pString <|> pVar
@@ -50,8 +51,8 @@ pExpr = call <|> pInt <|> pFloat <|> pString <|> pVar
     pVar = Var <$> symbol
     call = Call <$> pVar <*> paren args
       where args = delimited pExpr (token ",")
-    
-    
+
+
 
 
 parse :: [Token] -> [PTree]
@@ -61,7 +62,7 @@ parse = run $ separated pDecl term
 -- Emitting definitions
 emitTree :: [PTree] -> [String]
 emitTree = (concat .) $ map $ \case
-    Decl y name       -> pure $ emitTypeDecl y name ++ ";"
+    Decl v            -> pure $ emitVar v ++ ";"
     FuncDecl y name b -> emitFunc y name b
     Expr e            -> pure $ emitExpr e ++ ";"
 

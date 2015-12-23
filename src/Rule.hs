@@ -9,6 +9,7 @@ newtype Rule t a = Rule { step :: [t] -> Result t a }
 
 data Result t a = Accept a [t]
                 | Reject   [t]
+    deriving Show
 
 
 instance Functor (Rule t) where
@@ -56,6 +57,11 @@ separated  r s = many s *> delimited  r (many1 s) <* many s
 separated1 r s = many s *> delimited1 r (many1 s) <* many s
 
 
+current :: Rule t t
+current = Rule $ \ts -> case ts of
+    t:_ -> Accept t ts
+    _   -> Reject ts
+
 look :: Rule t a -> Rule t a
 look r = Rule $ \ts -> case step r ts of
     Accept a _ -> Accept a ts
@@ -63,18 +69,18 @@ look r = Rule $ \ts -> case step r ts of
 
 match :: Eq t => t -> Rule t t
 match t = Rule $ \case
-    (t':ts) | t == t' -> Accept t' ts
-    ts                -> Reject ts
+    t':ts | t == t' -> Accept t' ts
+    ts              -> Reject ts
 
 matchIf :: (t -> Bool) -> Rule t t
 matchIf p = Rule $ \case
-    (t:ts) | p t -> Accept t ts
-    ts           -> Reject ts
+    t:ts | p t -> Accept t ts
+    ts         -> Reject ts
 
 matchMaybe :: (t -> Maybe a) -> Rule t a
 matchMaybe f = Rule $ \case
-    (t:ts) | isJust (f t) -> Accept (fromJust (f t)) ts
-    ts                    -> Reject ts
+    t:ts | isJust (f t) -> Accept (fromJust (f t)) ts
+    ts                  -> Reject ts
 
 
 -- Unexpectable typeclass used for reporting errors

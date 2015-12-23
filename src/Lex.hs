@@ -65,6 +65,9 @@ paren   r = token "(" *> r <* token ")"
 brace   r = token "[" *> r <* token "]"
 bracket r = token "{" *> r <* token "}"
 
+line :: Rule Token Line
+line = tline <$> current
+
 
 -- Tokenizing rules
 tokSym :: Rule Char (Line -> Token)
