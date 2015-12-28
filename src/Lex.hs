@@ -2,6 +2,7 @@ module Lex where
 
 import Prelude hiding (lex)
 import Control.Applicative
+import Control.Monad
 import Data.Char
 import Rule
 
@@ -68,7 +69,7 @@ tokDigit :: Num n => Int -> Rule Char n
 tokDigit base = fromIntegral . digitToInt <$> matchIf isBase
   where isBase c = isDigit c && digitToInt c < base
 
-tokSign :: Real n => Rule Char (n -> n)
+tokSign :: Num n => Rule Char (n -> n)
 tokSign = rule $ \case
     '-':cs -> accept negate cs
     '+':cs -> accept id cs
@@ -113,17 +114,17 @@ tokNum = do
         c:_ | elem c ".pPeE" -> do
             frac <- tokFrac base <|> pure 0
             exp  <- tokExp <|> pure 1
-            return $ Float (sign' ((int' + frac)*exp))
+            return $ Float (sign' ((int'+frac)*exp))
         _ -> do
             return $ Int (sign int)
 
 
 tokEscape :: Int -> Int -> Rule Char Char
-tokEscape base count = toChar <$> (sequence $ replicate count $ tokDigit base)
+tokEscape count base = toChar <$> replicateM count (tokDigit base)
   where toChar = chr . foldr1 (\a b -> a + b*base)
 
-tokCharPart :: Char -> Rule Char Char
-tokCharPart q = rule $ \case
+tokC :: Char -> Rule Char Char
+tokC q = rule $ \case
     '\\':'\\':cs  -> accept '\\' cs
     '\\':'\'':cs  -> accept '\'' cs
     '\\':'\"':cs  -> accept '\"' cs
@@ -133,31 +134,32 @@ tokCharPart q = rule $ \case
     '\\':'t':cs   -> accept '\t' cs
     '\\':'v':cs   -> accept '\v' cs
     '\\':'0':cs   -> accept '\0' cs
-    '\\':'b':cs   -> accept () cs *> tokEscape 2 8
-    '\\':'o':cs   -> accept () cs *> tokEscape 8 3
-    '\\':'d':cs   -> accept () cs *> tokEscape 10 3
-    '\\':'x':cs   -> accept () cs *> tokEscape 16 2
+    '\\':'b':cs   -> accept (8, 2)  cs >>= uncurry tokEscape
+    '\\':'o':cs   -> accept (3, 8)  cs >>= uncurry tokEscape
+    '\\':'d':cs   -> accept (3, 10) cs >>= uncurry tokEscape
+    '\\':'x':cs   -> accept (2, 16) cs >>= uncurry tokEscape
     '\\':_        -> reject
     '\n':_        -> reject
     c:cs | c /= q -> accept c cs
     _             -> reject
 
 tokChar :: Rule Char (Line -> Token)
-tokChar = (Int . ord) <$ match '\'' <*> tokCharPart '\'' <* match '\''
+tokChar = Int . ord <$ match '\'' <*> tokC '\'' <* match '\''
 
 tokString :: Rule Char (Line -> Token)
-tokString = String <$ match '\"' <*> many (tokCharPart '\"') <* match '\"'
+tokString = String <$ match '\"' <*> many (tokC '\"') <* match '\"'
 
-tokSingleComment :: Rule Char String
-tokSingleComment = matches "//" *> many (matchIf (/= '\n'))
+tokSingleComment :: Rule Char Line
+tokSingleComment = 0 <$ matches "//" <* many (matchIf (/= '\n'))
 
-tokMultiComment :: Rule Char String
-tokMultiComment = matches "/*" *> many comment <* matches "*/"
+tokMultiComment :: Rule Char Line
+tokMultiComment = sum <$ matches "/*" <*> many comment <* matches "*/"
   where
     comment = rule $ \case
         '/':'*':_ -> tokMultiComment *> comment
         '*':'/':_ -> reject
-        c:cs      -> accept c cs
+        '\n':cs   -> accept 1 cs
+        _:cs      -> accept 0 cs
         _         -> reject
 
 tokenize :: Rule Char (Line -> Token)
@@ -169,11 +171,11 @@ tokenize = rule $ \case
     '[':cs              -> accept (Token "[") cs
     ']':cs              -> accept (Token "]") cs
     ',':cs              -> accept (Token ",") cs
-    c:cs | elem c ";\n" -> accept Term cs
     c:_ | isAlpha c     -> tokSym
     c:_ | isDigit c     -> tokNum
     '\'':_              -> tokChar
     '\"':_              -> tokString
+    c:cs | elem c ";\n" -> accept Term cs
     '/':'/':_           -> tokSingleComment *> tokenize
     '/':'*':_           -> tokMultiComment  *> tokenize
     c:_ | isSpace c     -> matchAny *> tokenize
@@ -181,8 +183,11 @@ tokenize = rule $ \case
 
 tokLines :: Rule Char Line
 tokLines = rule $ \case
-    '\n':cs   -> accept 1 cs
-    _         -> 0 <$ tokenize
+    '\n':cs         -> accept 1 cs
+    '/':'/':_       -> (+) <$> tokSingleComment <*> tokLines
+    '/':'*':_       -> (+) <$> tokMultiComment  <*> tokLines
+    c:_ | isSpace c -> matchAny *> tokLines
+    _               -> 0 <$ tokenize
 
 
 lex :: String -> [Token]

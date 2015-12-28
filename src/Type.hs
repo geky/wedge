@@ -4,6 +4,7 @@ import Rule
 import Lex
 import Control.Applicative
 import Data.List
+import Data.Maybe
 
 -- Type definitions
 data Type
@@ -93,7 +94,7 @@ emitVar :: Var -> String
 emitVar V{vtype=Just y, vname=name} = case y of
     ArrayType y n -> emitType y ++ maybe "" (" "++) name
                   ++ "[" ++ maybe "" show n ++ "]"
-    FuncType y z  -> emitType y ++ " (*" ++ maybe "" id name ++ ")"
+    FuncType y z  -> emitType y ++ " (*" ++ fromMaybe "" name ++ ")"
                   ++ emitArgs z
     y             -> emitType y ++ maybe "" (" "++) name
 

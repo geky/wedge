@@ -2,6 +2,7 @@ module Rule where
 
 import Control.Applicative
 import Data.Maybe
+import Data.List
 
 
 -- Rule definition and operations
@@ -20,7 +21,7 @@ accept :: a -> [t] -> Rule t a
 accept x ts = Rule $ \(a,_,_) _ -> a x ts
 
 reject :: Rule t a
-reject = Rule $ \(_,r,_) ts -> r ts
+reject = Rule $ \(_,r,_) -> r
 
 
 instance Functor (Rule t) where
@@ -63,26 +64,31 @@ separated1 r s = many s *> ((:) <$> r <*> rest)
 
 
 -- miscellaneous rules
-current :: Rule t t
-current = look matchAny
-
 look :: Rule t a -> Rule t a
 look x = Rule $ \c ts -> unrule x (c' c ts) ts
   where c' (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
 
-matchAny :: Rule t t
-matchAny = matchIf $ const True
+try :: Rule t a -> Rule t a
+try x = Rule $ \(a,r,_) -> unrule x (a,r,r)
+
+current :: Rule t t
+current = look matchAny
 
 match :: Eq t => t -> Rule t t
 match t = matchIf (== t)
 
 matches :: Eq t => [t] -> Rule t [t]
-matches = foldr (liftA2 (:)) (pure []) . map match
+matches ts = rule $ \case
+    ts' | isPrefixOf ts ts' -> uncurry accept $ splitAt (length ts) ts'
+    _                       -> reject
 
 matchIf :: (t -> Bool) -> Rule t t
 matchIf p = rule $ \case
     t:ts | p t -> accept t ts
     _          -> reject
+
+matchAny :: Rule t t
+matchAny = matchIf $ const True
 
 matchMaybe :: (t -> Maybe a) -> Rule t a
 matchMaybe f = fromJust . f <$> matchIf (isJust . f)
@@ -98,7 +104,6 @@ class Unexpectable t where
     xlines :: [t] -> [[t]]
     xlines = xlines' 0 []
       where
-        xlines' :: Unexpectable t => Line -> [t] -> [t] -> [[t]]
         xlines' _ _ []                         = [[]]
         xlines' c r ts@(t:_) | xline (t:r) > c = [] : xlines' (c+1) r ts
         xlines' c r (t:ts)                     = (t:l) : ls

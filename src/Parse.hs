@@ -72,12 +72,12 @@ parse = run $ separated pDecl term
 -- Emitting definitions
 emitTree :: [PTree] -> [String]
 emitTree = (concat .) $ map $ \case
-    Decl v            -> pure $ emitVar v ++ ";"
+    Decl v            -> [emitVar v ++ ";"]
     FuncDecl y name b -> emitFunc y name b
-    Expr e            -> pure $ emitExpr e ++ ";"
+    Expr e            -> [emitExpr e ++ ";"]
 
 emitFunc :: Type -> String -> [PTree] -> [String]
-emitFunc f name block = pure prefix ++ block' ++ pure suffix
+emitFunc f name block = [prefix] ++ block' ++ [suffix]
   where
     FuncType y z = f
     prefix = emitType y ++ " " ++ name ++ emitArgs z ++ " {"
