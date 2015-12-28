@@ -28,11 +28,11 @@ instance Unexpectable Var where
 
 -- Type rules
 pBase :: Rule Token Type
-pBase = Rule $ \case
-    Symbol{tsymbol="void"}:ts -> Accept Void ts
-    Symbol{tsymbol=s}:ts      -> Accept (Type s) ts
-    Token{ttoken="("}:ts      -> step (pTuple <* token ")") ts
-    ts                        -> Reject ts
+pBase = rule $ \case
+    Symbol{tsymbol="void"}:ts -> accept Void ts
+    Symbol{tsymbol=s}:ts      -> accept (Type s) ts
+    Token{ttoken="("}:_       -> token "(" *> pTuple <* token ")"
+    _                         -> reject
 
 pTuple :: Rule Token Type
 pTuple = toTuple <$> delimited1 pBase (token ",")
@@ -53,19 +53,12 @@ pType = pTuple <**> pSuffix
 
 -- TODO fold this into another function?
 pFuncVar :: Rule Token (Type, String)
-pFuncVar = toFunc <$> pType <*> symbol <*> paren pType
+pFuncVar = toFunc <$> pType <*> symbol <* token "(" <*> pType <* token ")"
   where toFunc ret name arg = (FuncType ret arg, name)
 
 pVar :: Rule Token Var
-pVar = toVar <$> line <*> pType <*> optional symbol <*> pSuffix
-  where toVar line base name suff = V (Just $ suff base) name line
-
---pVar :: Rule Token (Type, String)
---pVar = do
---    base <- pType
---    name <- symbol
---    suff <- pSuffix
---    return (suff base, name)
+pVar = toVar <$> current <*> pType <*> optional symbol <*> pSuffix
+  where toVar t base name suff = V (Just $ suff base) name (tline t)
 
 
 -- Emitting definitions

@@ -30,17 +30,27 @@ instance Unexpectable PTree where
 
 -- Parsing rules
 pDecl :: Rule Token PTree
-pDecl = pFunc <|> Decl <$> pVar
+pDecl = pVar >>= pDeclSuffix
+
+pDeclSuffix :: Var -> Rule Token PTree
+pDeclSuffix v = rule $ \case
+    Token{ttoken="{"}:_ -> block v
+    Token{ttoken="="}:_ -> undefined
+    ts                  -> accept (Decl v) ts
+  where
+    block V{vtype=Just y@(FuncType _ _), vname=Just n} =
+        FuncDecl y n <$> pBlock
+    block _ = empty
 
 pFunc :: Rule Token PTree
 pFunc = toFunc <$> pType <*> symbol <*> pFuncSuffix <*> pBlock
   where toFunc base name suff block = FuncDecl (suff base) name block
 
 pBlock :: Rule Token [PTree]
-pBlock = bracket $ separated pStmt term
+pBlock = token "{" *> separated pStmt term <* token "}"
 
 pStmt :: Rule Token PTree
-pStmt = pDecl <* look (term <|> token "}")  <|> Expr <$> pExpr
+pStmt = pDecl <* look (term <|> token "}") <|> Expr <$> pExpr
 
 pExpr :: Rule Token Expr
 pExpr = call <|> pInt <|> pFloat <|> pString <|> pVar
@@ -49,7 +59,7 @@ pExpr = call <|> pInt <|> pFloat <|> pString <|> pVar
     pFloat  = FloatLit <$> float
     pString = StringLit <$> string
     pVar = Var <$> symbol
-    call = Call <$> pVar <*> paren args
+    call = Call <$> pVar <* token "(" <*> args <* token ")"
       where args = delimited pExpr (token ",")
 
 

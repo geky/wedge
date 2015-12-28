@@ -1,9 +1,9 @@
 module Lex where
 
 import Prelude hiding (lex)
+import Control.Applicative
 import Data.Char
 import Rule
-import Control.Applicative
 
 
 -- Token definitions
@@ -30,124 +30,117 @@ instance Unexpectable Token where
 
 -- Token matching rules
 symbol :: Rule Token String
-symbol = Rule $ \case
-    Symbol{tsymbol=s}:ts -> Accept s ts
-    ts                   -> Reject ts
+symbol = rule $ \case
+    Symbol{tsymbol=s}:ts -> accept s ts
+    _                    -> reject
 
 int :: Rule Token Int
-int = Rule $ \case
-    Int{tint=i}:ts -> Accept i ts
-    ts             -> Reject ts
+int = rule $ \case
+    Int{tint=i}:ts -> accept i ts
+    _              -> reject
 
 float :: Rule Token Double
-float = Rule $ \case
-    Float{tfloat=f}:ts -> Accept f ts
-    ts                 -> Reject ts
+float = rule $ \case
+    Float{tfloat=f}:ts -> accept f ts
+    _                  -> reject
 
 string :: Rule Token String
-string = Rule $ \case
-    String{tstring=s}:ts -> Accept s ts
-    ts                   -> Reject ts
+string = rule $ \case
+    String{tstring=s}:ts -> accept s ts
+    _                    -> reject
 
 term :: Rule Token ()
-term = Rule $ \case
-    Term{}:ts -> Accept () ts
-    ts        -> Reject ts
+term = rule $ \case
+    Term{}:ts -> accept () ts
+    _         -> reject
 
 token :: String -> Rule Token ()
-token t = Rule $ \case
-    Token{ttoken=t'}:ts | t == t' -> Accept () ts
-    ts                            -> Reject ts
-
--- More complex token matching
-paren, brace, bracket :: Rule Token a -> Rule Token a
-paren   r = token "(" *> r <* token ")"
-brace   r = token "[" *> r <* token "]"
-bracket r = token "{" *> r <* token "}"
-
-line :: Rule Token Line
-line = tline <$> current
+token t = rule $ \case
+    Token{ttoken=t'}:ts | t == t' -> accept () ts
+    _                             -> reject
 
 
 -- Tokenizing rules
 tokSym :: Rule Char (Line -> Token)
 tokSym = Symbol <$> many1 (matchIf isAlphaNum)
 
-tokDigit :: Real n => n -> Rule Char n
-tokDigit base = toBase <$> matchIf isBase
-  where
-    isBase c = isDigit c && toBase c < base
-    toBase = fromIntegral . digitToInt
+tokDigit :: Num n => Int -> Rule Char n
+tokDigit base = fromIntegral . digitToInt <$> matchIf isBase
+  where isBase c = isDigit c && digitToInt c < base
 
 tokSign :: Real n => Rule Char (n -> n)
-tokSign = Rule $ \case
-    '-':cs -> Accept negate cs
-    '+':cs -> Accept id cs
-    cs     -> Accept id cs
+tokSign = rule $ \case
+    '-':cs -> accept negate cs
+    '+':cs -> accept id cs
+    cs     -> accept id cs
 
-tokBase :: Real n => Rule Char n
-tokBase = Rule $ \case
-    '0':b:cs | elem b "bB" -> Accept 2 cs
-    '0':b:cs | elem b "oO" -> Accept 8 cs
-    '0':b:cs | elem b "xX" -> Accept 16 cs
-    cs                     -> Accept 10 cs
+tokBase :: Rule Char Int
+tokBase = rule $ \case
+    '0':b:cs | elem b "bB" -> accept 2 cs
+    '0':b:cs | elem b "oO" -> accept 8 cs
+    '0':b:cs | elem b "xX" -> accept 16 cs
+    cs                     -> accept 10 cs
 
-tokExp :: Real n => Rule Char n
-tokExp = Rule $ \case
-    c:cs | elem c "eE" -> Accept 10 cs
-    c:cs | elem c "pP" -> Accept 2 cs
-    cs                 -> Reject cs
+tokInt :: Num n => Int -> Rule Char n
+tokInt base = toInt base <$> many1 (tokDigit base)
+  where
+    toInt base' = foldr1 (\a b -> a + b*base)
+      where base = fromIntegral base'
 
-tokIntPart :: Real n => n -> Rule Char n
-tokIntPart base = toInt <$> many1 (tokDigit base)
-  where toInt = foldr1 (\a b -> a + b*base)
+tokFrac :: Fractional n => Int -> Rule Char n
+tokFrac base = toFrac base <$ match '.' <*> many1 (tokDigit base)
+  where
+    toFrac base' = (/base) . foldr1 (\a b -> a + b/base)
+      where base = fromIntegral base'
 
-tokFracPart :: RealFrac n => n -> Rule Char n
-tokFracPart base = toFrac <$ match '.' <*> many1 (tokDigit base)
-  where toFrac = (/base) . foldr1 (\a b -> a + b/base)
+tokExp :: Fractional n => Rule Char n
+tokExp = (^^) <$> tokE <*> (tokSign <*> tokInt 10)
+  where 
+    tokE = rule $ \case
+        c:cs | elem c "eE" -> accept 10 cs
+        c:cs | elem c "pP" -> accept 2 cs
+        _                  -> reject
 
-tokExpPart :: RealFrac n => Rule Char n
-tokExpPart = (^^) <$> tokExp <*> (tokSign <*> tokIntPart 10)
-
-tokInt :: Rule Char (Line -> Token)
-tokInt = Int <$> do
+tokNum :: Rule Char (Line -> Token)
+tokNum = do
     sign <- tokSign
     base <- tokBase
-    int  <- tokIntPart base
-    return $ sign int
+    int  <- tokInt base
+    let sign' = (*) $ fromIntegral $ sign 1
+    let int'  = fromIntegral int
 
-tokFloat :: Rule Char (Line -> Token)
-tokFloat = Float <$> do
-    sign <- tokSign
-    base <- tokBase
-    int  <- tokIntPart base
-    frac <- tokFracPart base
-    exp  <- tokExpPart <|> pure 1
-    return $ sign ((int + frac) * exp)
+    rule $ \case
+        c:_ | elem c ".pPeE" -> do
+            frac <- tokFrac base <|> pure 0
+            exp  <- tokExp <|> pure 1
+            return $ Float (sign' ((int' + frac)*exp))
+        _ -> do
+            return $ Int (sign int)
+
 
 tokEscape :: Int -> Int -> Rule Char Char
 tokEscape base count = toChar <$> (sequence $ replicate count $ tokDigit base)
   where toChar = chr . foldr1 (\a b -> a + b*base)
 
 tokCharPart :: Char -> Rule Char Char
-tokCharPart q = Rule $ \case
-    '\\':'\\':cs  -> Accept '\\' cs
-    '\\':'\'':cs  -> Accept '\'' cs
-    '\\':'\"':cs  -> Accept '\"' cs
-    '\\':'f':cs   -> Accept '\f' cs
-    '\\':'n':cs   -> Accept '\n' cs
-    '\\':'r':cs   -> Accept '\r' cs
-    '\\':'t':cs   -> Accept '\t' cs
-    '\\':'v':cs   -> Accept '\v' cs
-    '\\':'0':cs   -> Accept '\0' cs
-    '\\':'b':cs   -> step (tokEscape  2 8) cs
-    '\\':'o':cs   -> step (tokEscape  8 3) cs
-    '\\':'d':cs   -> step (tokEscape 10 3) cs
-    '\\':'x':cs   -> step (tokEscape 16 2) cs
-    cs@('\\':_)   -> Reject cs
-    cs@('\n':_)   -> Reject cs
-    c:cs | c /= q -> Accept c cs
-    cs            -> Reject cs
+tokCharPart q = rule $ \case
+    '\\':'\\':cs  -> accept '\\' cs
+    '\\':'\'':cs  -> accept '\'' cs
+    '\\':'\"':cs  -> accept '\"' cs
+    '\\':'f':cs   -> accept '\f' cs
+    '\\':'n':cs   -> accept '\n' cs
+    '\\':'r':cs   -> accept '\r' cs
+    '\\':'t':cs   -> accept '\t' cs
+    '\\':'v':cs   -> accept '\v' cs
+    '\\':'0':cs   -> accept '\0' cs
+    '\\':'b':cs   -> accept () cs *> tokEscape 2 8
+    '\\':'o':cs   -> accept () cs *> tokEscape 8 3
+    '\\':'d':cs   -> accept () cs *> tokEscape 10 3
+    '\\':'x':cs   -> accept () cs *> tokEscape 16 2
+    '\\':_        -> reject
+    '\n':_        -> reject
+    c:cs | c /= q -> accept c cs
+    _             -> reject
 
 tokChar :: Rule Char (Line -> Token)
 tokChar = (Int . ord) <$ match '\'' <*> tokCharPart '\'' <* match '\''
@@ -155,28 +148,41 @@ tokChar = (Int . ord) <$ match '\'' <*> tokCharPart '\'' <* match '\''
 tokString :: Rule Char (Line -> Token)
 tokString = String <$ match '\"' <*> many (tokCharPart '\"') <* match '\"'
 
+tokSingleComment :: Rule Char String
+tokSingleComment = matches "//" *> many (matchIf (/= '\n'))
+
+tokMultiComment :: Rule Char String
+tokMultiComment = matches "/*" *> many comment <* matches "*/"
+  where
+    comment = rule $ \case
+        '/':'*':_ -> tokMultiComment *> comment
+        '*':'/':_ -> reject
+        c:cs      -> accept c cs
+        _         -> reject
 
 tokenize :: Rule Char (Line -> Token)
-tokenize = Rule $ \case
-    '(':cs                  -> Accept (Token "(") cs
-    ')':cs                  -> Accept (Token ")") cs
-    '{':cs                  -> Accept (Token "{") cs
-    '}':cs                  -> Accept (Token "}") cs
-    '[':cs                  -> Accept (Token "[") cs
-    ']':cs                  -> Accept (Token "]") cs
-    ',':cs                  -> Accept (Token ",") cs
-    c:cs     | elem c ";\n" -> Accept Term cs
-    c:cs     | isSpace c    -> step tokenize cs
-    cs@(c:_) | isAlpha c    -> step tokSym cs
-    cs@(c:_) | isDigit c    -> step (tokFloat <|> tokInt) cs
-    cs@('\'':_)             -> step tokChar cs
-    cs@('\"':_)             -> step tokString cs
-    cs                      -> Reject cs
+tokenize = rule $ \case
+    '(':cs              -> accept (Token "(") cs
+    ')':cs              -> accept (Token ")") cs
+    '{':cs              -> accept (Token "{") cs
+    '}':cs              -> accept (Token "}") cs
+    '[':cs              -> accept (Token "[") cs
+    ']':cs              -> accept (Token "]") cs
+    ',':cs              -> accept (Token ",") cs
+    c:cs | elem c ";\n" -> accept Term cs
+    c:_ | isAlpha c     -> tokSym
+    c:_ | isDigit c     -> tokNum
+    '\'':_              -> tokChar
+    '\"':_              -> tokString
+    '/':'/':_           -> tokSingleComment *> tokenize
+    '/':'*':_           -> tokMultiComment  *> tokenize
+    c:_ | isSpace c     -> matchAny *> tokenize
+    _                   -> reject
 
 tokLines :: Rule Char Line
-tokLines = Rule $ \case
-    '\n':cs -> Accept 1 cs
-    cs      -> step (0 <$ tokenize) cs
+tokLines = rule $ \case
+    '\n':cs   -> accept 1 cs
+    _         -> 0 <$ tokenize
 
 
 lex :: String -> [Token]

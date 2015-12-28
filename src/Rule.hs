@@ -5,39 +5,42 @@ import Data.Maybe
 
 
 -- Rule definition and operations
-newtype Rule t a = Rule { step :: [t] -> Result t a }
+newtype Rule t a = Rule
+    { unrule :: forall b . 
+        ( a -> [t] -> b -- accept
+        ,      [t] -> b -- reject
+        ,      [t] -> b -- fail
+        ) -> [t] -> b   -- rule
+    }
 
-data Result t a = Accept a [t]
-                | Reject   [t]
-    deriving Show
+rule :: ([t] -> Rule t a) -> Rule t a
+rule x = Rule $ \c ts -> unrule (x ts) c ts
+
+accept :: a -> [t] -> Rule t a
+accept x ts = Rule $ \(a,_,_) _ -> a x ts
+
+reject :: Rule t a
+reject = Rule $ \(_,r,_) ts -> r ts
 
 
 instance Functor (Rule t) where
-    fmap f r = Rule $ \ts -> case step r ts of
-        Accept a ts -> Accept (f a) ts
-        Reject ts   -> Reject ts
+    fmap f x = Rule $ \(a,r,e) -> unrule x (a.f,r,e)
 
 instance Applicative (Rule t) where
-    pure a = Rule $ Accept a
+    pure = rule . accept
 
-    f <*> a = Rule $ \ts -> case step f ts of
-        Accept f ts -> step (f <$> a) ts
-        Reject ts   -> Reject ts
+    x <*> y = Rule $ \(a,r,e) -> unrule x (\f -> unrule y (a.f,e,e), r, e)
 
 instance Alternative (Rule t) where
-    empty = Rule Reject
+    empty = reject
 
-    a <|> b = Rule $ \ts -> case step a ts of
-        Accept a ts -> Accept a ts
-        Reject _    -> step b ts
+    x <|> y = Rule $ \(a,r,e) -> unrule x (a, unrule y (a,r,e), e)
 
 instance Monad (Rule t) where
     return = pure
     fail _ = empty
 
-    a >>= b = Rule $ \ts -> case step a ts of
-        Accept a ts -> step (b a) ts
-        Reject ts   -> Reject ts
+    x >>= y = Rule $ \(a,r,e) -> unrule x (\z -> unrule (y z) (a,e,e), r, e)
 
 
 -- many is already defined in Control.Applicative
@@ -53,34 +56,36 @@ terminated  r s = many  (r <* s)
 terminated1 r s = many1 (r <* s)
 
 separated, separated1 :: Alternative f => f a -> f b -> f [a]
-separated  r s = many s *> delimited  r (many1 s) <* many s
-separated1 r s = many s *> delimited1 r (many1 s) <* many s
+separated  r s = many s *> ((:) <$> r <*> rest <|> pure [])
+  where rest = s *> separated r s <|> pure []
+separated1 r s = many s *> ((:) <$> r <*> rest)
+  where rest = s *> separated r s <|> pure []
 
 
+-- miscellaneous rules
 current :: Rule t t
-current = Rule $ \ts -> case ts of
-    t:_ -> Accept t ts
-    _   -> Reject ts
+current = look matchAny
 
 look :: Rule t a -> Rule t a
-look r = Rule $ \ts -> case step r ts of
-    Accept a _ -> Accept a ts
-    Reject _   -> Reject ts
+look x = Rule $ \c ts -> unrule x (c' c ts) ts
+  where c' (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
+
+matchAny :: Rule t t
+matchAny = matchIf $ const True
 
 match :: Eq t => t -> Rule t t
-match t = Rule $ \case
-    t':ts | t == t' -> Accept t' ts
-    ts              -> Reject ts
+match t = matchIf (== t)
+
+matches :: Eq t => [t] -> Rule t [t]
+matches = foldr (liftA2 (:)) (pure []) . map match
 
 matchIf :: (t -> Bool) -> Rule t t
-matchIf p = Rule $ \case
-    t:ts | p t -> Accept t ts
-    ts         -> Reject ts
+matchIf p = rule $ \case
+    t:ts | p t -> accept t ts
+    _          -> reject
 
 matchMaybe :: (t -> Maybe a) -> Rule t a
-matchMaybe f = Rule $ \case
-    t:ts | isJust (f t) -> Accept (fromJust (f t)) ts
-    ts                  -> Reject ts
+matchMaybe f = fromJust . f <$> matchIf (isJust . f)
 
 
 -- Unexpectable typeclass used for reporting errors
@@ -109,11 +114,10 @@ instance Unexpectable Char where
     xshow = show . head
 
 
-run :: (Unexpectable t) => Rule t a -> [t] -> a
-run r ts = case step r ts of
-    Accept a [] -> a
-    Accept _ ts -> unexpected $ handled ts
-    Reject   ts -> unexpected $ handled ts
+run :: Unexpectable t => Rule t a -> [t] -> a
+run r ts = unrule r (end, unexpect, unexpect) ts
   where
-    handled ts' = reverse $ take (length ts - length ts' + 1) ts
+    end a [] = a
+    end _ ts = unexpect ts
+    unexpect ts' = unexpected $ reverse $ take (length ts-length ts'+1) ts
 
