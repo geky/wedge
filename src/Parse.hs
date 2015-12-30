@@ -1,94 +1,48 @@
 module Parse where
 
 import Prelude hiding (lex)
-import Control.Applicative
-import Data.List
 import Lex
 import Rule
 import Type
 
 
 -- Parse tree definitions
-data Expr
-    = Call Expr [Expr]
-    | Var String
-    | IntLit Int
-    | FloatLit Double
-    | StringLit String
+data WExpr
+    = WCall WExpr [WExpr]
+    | WLit Token
     deriving Show
 
-data PTree
-    = Decl Var
-    | FuncDecl Type String [PTree]
-    | Expr Expr
+data WStmt
+    = WDeclStmt WDecl
+    | WExprStmt WExpr
     deriving Show
 
-instance Unexpectable PTree where
-    xline = pred . length
-    xshow = show . head
+data WDecl
+    = WLet (Maybe Type) String
+    deriving Show
+
+type WTree = [WDecl]
+
 
 
 -- Parsing rules
-pDecl :: Rule Token PTree
-pDecl = pVar >>= pDeclSuffix
-
-pDeclSuffix :: Var -> Rule Token PTree
-pDeclSuffix v = rule $ \case
-    Token{ttoken="{"}:_ -> block v
-    Token{ttoken="="}:_ -> undefined
-    ts                  -> accept (Decl v) ts
+pDecl :: Rule Token WDecl
+pDecl = WLet <$> let' <*> symbol
   where
-    block V{vtype=Just y@(FuncType _ _), vname=Just n} =
-        FuncDecl y n <$> pBlock
-    block _ = empty
+    let' = rule $ \case
+        Symbol "let":ts -> accept Nothing ts
+        _               -> Just <$> pType
+    
 
-pFunc :: Rule Token PTree
-pFunc = toFunc <$> pType <*> symbol <*> pFuncSuffix <*> pBlock
-  where toFunc base name suff block = FuncDecl (suff base) name block
-
-pBlock :: Rule Token [PTree]
-pBlock = token "{" *> separated pStmt term <* token "}"
-
-pStmt :: Rule Token PTree
-pStmt = pDecl <* look (term <|> token "}") <|> Expr <$> pExpr
-
-pExpr :: Rule Token Expr
-pExpr = call <|> pInt <|> pFloat <|> pString <|> pVar
-  where
-    pInt    = IntLit <$> int
-    pFloat  = FloatLit <$> float
-    pString = StringLit <$> string
-    pVar = Var <$> symbol
-    call = Call <$> pVar <* token "(" <*> args <* token ")"
-      where args = delimited pExpr (token ",")
-
-
-
-
-parse :: [Token] -> [PTree]
-parse = run $ separated pDecl term
+parse :: String -> WTree
+parse cs = run (separated pDecl term) (lex cs) (lexLines cs)
 
 
 -- Emitting definitions
-emitTree :: [PTree] -> [String]
-emitTree = (concat .) $ map $ \case
-    Decl v            -> [emitVar v ++ ";"]
-    FuncDecl y name b -> emitFunc y name b
-    Expr e            -> [emitExpr e ++ ";"]
+emitTree :: WTree -> [String]
+emitTree = map emitDecl
 
-emitFunc :: Type -> String -> [PTree] -> [String]
-emitFunc f name block = [prefix] ++ block' ++ [suffix]
-  where
-    FuncType y z = f
-    prefix = emitType y ++ " " ++ name ++ emitArgs z ++ " {"
-    block' = map (replicate 4 ' ' ++) $ emitTree block
-    suffix = "}"
+emitDecl :: WDecl -> String
+emitDecl (WLet (Just y) name) = emitVar (y, Just name) ++ ";"
+emitDecl (WLet Nothing _) = undefined
 
-emitExpr :: Expr -> String
-emitExpr = \case
-    Call e args -> emitExpr e ++ toArgs args
-    Var s       -> s
-    IntLit i    -> show i
-    FloatLit f  -> show f
-    StringLit s -> show s
-  where toArgs = (\a -> "(" ++ a ++ ")") . intercalate ", " . map emitExpr

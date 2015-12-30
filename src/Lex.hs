@@ -9,60 +9,45 @@ import Rule
 
 -- Token definitions
 data Token
-    = Symbol { tsymbol :: String,   tline :: Line }
-    | Int    { tint    :: Int,      tline :: Line }
-    | Float  { tfloat  :: Double,   tline :: Line }
-    | String { tstring :: String,   tline :: Line }
-    | Term   {                      tline :: Line }
-    | Token  { ttoken  :: String,   tline :: Line }
-
-instance Show Token where
-    show Symbol{tsymbol=s} = "symbol " ++ show s
-    show Int{tint=i}       = "int " ++ show i
-    show Float{tfloat=f}   = "float " ++ show f
-    show String{tstring=s} = "string " ++ show s
-    show Term{}            = "term"
-    show Token{ttoken=t}   = show t
-
-instance Unexpectable Token where
-    xline = tline . head
-    xshow = show . head
+    = Symbol String
+    | Int Int
+    | Float Double
+    | String String
+    | Term
+    | Token String
+    deriving (Show, Eq)
 
 
 -- Token matching rules
 symbol :: Rule Token String
 symbol = rule $ \case
-    Symbol{tsymbol=s}:ts -> accept s ts
-    _                    -> reject
+    Symbol s:ts -> accept s ts
+    _           -> reject
 
 int :: Rule Token Int
 int = rule $ \case
-    Int{tint=i}:ts -> accept i ts
-    _              -> reject
+    Int i:ts -> accept i ts
+    _        -> reject
 
 float :: Rule Token Double
 float = rule $ \case
-    Float{tfloat=f}:ts -> accept f ts
-    _                  -> reject
+    Float f:ts -> accept f ts
+    _          -> reject
 
 string :: Rule Token String
 string = rule $ \case
-    String{tstring=s}:ts -> accept s ts
-    _                    -> reject
+    String s:ts -> accept s ts
+    _           -> reject
 
-term :: Rule Token ()
-term = rule $ \case
-    Term{}:ts -> accept () ts
-    _         -> reject
+term :: Rule Token Token
+term = match Term
 
-token :: String -> Rule Token ()
-token t = rule $ \case
-    Token{ttoken=t'}:ts | t == t' -> accept () ts
-    _                             -> reject
+token :: String -> Rule Token Token
+token t = match (Token t)
 
 
 -- Tokenizing rules
-tokSym :: Rule Char (Line -> Token)
+tokSym :: Rule Char Token
 tokSym = Symbol <$> many1 (matchIf isAlphaNum)
 
 tokDigit :: Num n => Int -> Rule Char n
@@ -102,7 +87,7 @@ tokExp = (^^) <$> tokE <*> (tokSign <*> tokInt 10)
         c:cs | elem c "pP" -> accept 2 cs
         _                  -> reject
 
-tokNum :: Rule Char (Line -> Token)
+tokNum :: Rule Char Token
 tokNum = do
     sign <- tokSign
     base <- tokBase
@@ -143,10 +128,10 @@ tokC q = rule $ \case
     c:cs | c /= q -> accept c cs
     _             -> reject
 
-tokChar :: Rule Char (Line -> Token)
+tokChar :: Rule Char Token
 tokChar = Int . ord <$ match '\'' <*> tokC '\'' <* match '\''
 
-tokString :: Rule Char (Line -> Token)
+tokString :: Rule Char Token
 tokString = String <$ match '\"' <*> many (tokC '\"') <* match '\"'
 
 tokSingleComment :: Rule Char Line
@@ -162,8 +147,9 @@ tokMultiComment = sum <$ matches "/*" <*> many comment <* matches "*/"
         _:cs      -> accept 0 cs
         _         -> reject
 
-tokenize :: Rule Char (Line -> Token)
+tokenize :: Rule Char Token
 tokenize = rule $ \case
+    '-':'>':cs          -> accept (Token "->") cs
     '(':cs              -> accept (Token "(") cs
     ')':cs              -> accept (Token ")") cs
     '{':cs              -> accept (Token "{") cs
@@ -190,9 +176,12 @@ tokLines = rule $ \case
     _               -> 0 <$ tokenize
 
 
+charLines :: String -> [Line]
+charLines = (0:) . scanl1 (+) . map (\c -> if c == '\n' then 1 else 0)
+
 lex :: String -> [Token]
-lex cs = zipWith ($) tokens (0:lines)
-  where
-    tokens = run (many tokenize) cs
-    lines = scanl1 (+) $ run (many tokLines) cs
+lex cs = run (many tokenize) cs (charLines cs)
+
+lexLines :: String -> [Line]
+lexLines cs = (0:) $ scanl1 (+) $ run (many tokLines) cs (charLines cs)
 

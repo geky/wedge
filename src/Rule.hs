@@ -94,35 +94,23 @@ matchMaybe :: (t -> Maybe a) -> Rule t a
 matchMaybe f = fromJust . f <$> matchIf (isJust . f)
 
 
--- Unexpectable typeclass used for reporting errors
+-- Running the actual rules
+runEither :: Rule t a -> [t] -> Either [t] a
+runEither r ts = unrule r (end, Left, Left) ts
+  where
+    end a [] = Right a
+    end _ ts = Left ts
+
+
 type Line = Int
 
-class Unexpectable t where
-    xline :: [t] -> Line
-    xshow :: [t] -> String
+unexpected :: Show t => [t] -> [Line] -> a
+unexpected ts ls = error $ "unexpected " ++ case (ts, ls) of
+    (t:_, l:_) -> show t ++ " on line " ++ show (l + 1)
+    _          -> "end of input"
 
-    xlines :: [t] -> [[t]]
-    xlines = xlines' 0 []
-      where
-        xlines' _ _ []                         = [[]]
-        xlines' c r ts@(t:_) | xline (t:r) > c = [] : xlines' (c+1) r ts
-        xlines' c r (t:ts)                     = (t:l) : ls
-          where l:ls = xlines' c (t:r) ts
-
-    unexpected :: [t] -> a
-    unexpected ts = error $ "unexpected " ++ case ts of
-        [] -> "end of input"
-        _  -> xshow ts ++ " on line " ++ show (xline ts + 1)
-
-instance Unexpectable Char where
-    xline = length . filter (== '\n')
-    xshow = show . head
-
-
-run :: Unexpectable t => Rule t a -> [t] -> a
-run r ts = unrule r (end, unexpect, unexpect) ts
-  where
-    end a [] = a
-    end _ ts = unexpect ts
-    unexpect ts' = unexpected $ reverse $ take (length ts-length ts'+1) ts
+run :: Show t => Rule t a -> [t] -> [Line] -> a
+run r ts ls = case runEither r ts of
+    Left ts' -> unexpected ts' $ drop (length ts-length ts'+1) ls
+    Right a  -> a
 

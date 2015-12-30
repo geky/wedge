@@ -7,70 +7,59 @@ import Data.List
 import Data.Maybe
 
 -- Type definitions
+type Tuple = [(Type, Maybe String)]
 data Type
     = Void
     | Type String
-    | StructType [Type]
     | ArrayType Type (Maybe Int)
-    | FuncType Type Type
-    deriving (Show, Eq)
-
-data Var = V
-    { vtype :: Maybe Type
-    , vname :: Maybe String
-    , vline :: Line
-    }
+    | StructType Tuple
+    | FuncType Tuple Tuple
     deriving Show
 
-instance Unexpectable Var where
-    xline = vline . head
-    xshow = show . head
+toTuple :: Type -> Tuple
+toTuple (StructType ys) = ys
+toTuple Void            = []
+toTuple y               = [(y, Nothing)]
+
+fromTuple :: Tuple -> Type
+fromTuple []             = Void
+fromTuple [(y, Nothing)] = y
+fromTuple ys             = StructType ys
 
 
--- Type rules
-pBase :: Rule Token Type
-pBase = rule $ \case
-    Symbol{tsymbol="void"}:ts -> accept Void ts
-    Symbol{tsymbol=s}:ts      -> accept (Type s) ts
-    Token{ttoken="("}:_       -> token "(" *> pTuple <* token ")"
-    _                         -> reject
-
-pTuple :: Rule Token Type
-pTuple = toTuple <$> delimited1 pBase (token ",")
-  where toTuple []  = Void
-        toTuple [y] = y
-        toTuple ys  = StructType ys
-
-pFuncSuffix, pArraySuffix :: Rule Token (Type -> Type)
-pFuncSuffix  = flip FuncType  <$ token "(" <*> pTuple       <* token ")"
-pArraySuffix = flip ArrayType <$ token "[" <*> optional int <* token "]"
-
-pSuffix :: Rule Token (Type -> Type)
-pSuffix = pFuncSuffix <|> pArraySuffix <|> pure id
-
+-- Type parsing
 pType :: Rule Token Type
-pType = pTuple <**> pSuffix
+pType = pBase <**> pSuffixes
+  where
+    pBase = rule $ \case
+        Symbol "void":ts -> accept Void ts
+        Token "(":_      -> token "(" *> pNested <* token ")"
+        Symbol s:ts      -> accept (Type s) ts
+        _                -> reject
 
+    pSuffixes = foldl (.) id <$> many pSuffix
+    pSuffix = flip ArrayType <$ token "[" <*> optional int <* token "]"
 
--- TODO fold this into another function?
-pFuncVar :: Rule Token (Type, String)
-pFuncVar = toFunc <$> pType <*> symbol <* token "(" <*> pType <* token ")"
-  where toFunc ret name arg = (FuncType ret arg, name)
+    pNested = fromTuple <$> (pTuple <**> pNestSuffixes)
+    pNestSuffixes = foldl (.) id <$> many pNestSuffix
+    pNestSuffix = toFunc <$ token "->" <*> pTuple
+      where toFunc rets args = [(FuncType args rets, Nothing)]
 
-pVar :: Rule Token Var
-pVar = toVar <$> current <*> pType <*> optional symbol <*> pSuffix
-  where toVar t base name suff = V (Just $ suff base) name (tline t)
+pTuple :: Rule Token Tuple
+pTuple = delimited pVar (token ",")
+
+pVar :: Rule Token (Type, Maybe String)
+pVar = (,) <$> pType <*> optional symbol
 
 
 -- Emitting definitions
-emitArgs :: Type -> String
+emitArgs :: Tuple -> String
 emitArgs = (\s -> "("++s++")") . \case
-    Void          -> "void"
-    StructType ys -> intercalate ", " $ map emitType ys
-    y             -> emitType y
+    [] -> "void"
+    ys -> intercalate ", " $ map emitVar ys
 
-emitMembers :: [Type] -> String
-emitMembers = (\s -> "{"++s++"}") . intercalate " " . map ((++";") . emitType)
+emitMembers :: Tuple -> String
+emitMembers = (\s -> "{"++s++"}") . intercalate " " . map ((++";") . emitVar)
 
 emitType :: Type -> String
 emitType = \case
@@ -81,21 +70,13 @@ emitType = \case
     Type t        -> t
     StructType y  -> "struct " ++ emitMembers y
     ArrayType y n -> emitType y ++ "[" ++ maybe "" show n ++ "]"
-    FuncType y z  -> emitType y ++ " (*)" ++ emitArgs z
+    FuncType y z  -> emitType (fromTuple z) ++ " (*)" ++ emitArgs y
 
-emitTypeDecl :: Type -> String -> String
-emitTypeDecl y name = case y of
-    ArrayType y (Just n) -> emitType y ++ " " ++ name ++ "[" ++ show n ++ "]"
-    ArrayType y Nothing  -> emitType y ++ " " ++ name ++ "[]"
-    FuncType y z         -> emitType y ++ " (*" ++ name ++ ")" ++ emitArgs z
-    y                    -> emitType y ++ " " ++ name
-
-emitVar :: Var -> String
-emitVar V{vtype=Just y, vname=name} = case y of
+emitVar :: (Type, Maybe String) -> String
+emitVar (y, name) = case y of
     ArrayType y n -> emitType y ++ maybe "" (" "++) name
                   ++ "[" ++ maybe "" show n ++ "]"
-    FuncType y z  -> emitType y ++ " (*" ++ fromMaybe "" name ++ ")"
+    FuncType y z  -> emitType (fromTuple y) ++ " (*" ++ fromMaybe "" name ++ ")"
                   ++ emitArgs z
     y             -> emitType y ++ maybe "" (" "++) name
 
-emitVar _ = undefined
