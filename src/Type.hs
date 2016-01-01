@@ -29,24 +29,24 @@ fromTuple ys             = StructType ys
 
 -- Type parsing
 pType :: Rule Token Type
-pType = pBase <**> pSuffixes
+pType = suffix pBase pSuffix
   where
     pBase = rule $ \case
         Symbol "void":ts -> accept Void ts
-        Token "(":_      -> token "(" *> pNested <* token ")"
+        Token "(":_      -> fromTuple <$> pNested
+        Token "{":_      -> fromTuple <$> pStruct
         Symbol s:ts      -> accept (Type s) ts
         _                -> reject
 
-    pSuffixes = foldl (.) id <$> many pSuffix
     pSuffix = flip ArrayType <$ token "[" <*> optional int <* token "]"
 
-    pNested = fromTuple <$> (pTuple <**> pNestSuffixes)
-    pNestSuffixes = foldl (.) id <$> many pNestSuffix
+    pNested = token "(" *> suffix pTuple pNestSuffix <* token ")"
     pNestSuffix = toFunc <$ token "->" <*> pTuple
       where toFunc rets args = [(FuncType args rets, Nothing)]
 
-pTuple :: Rule Token Tuple
+pTuple, pStruct :: Rule Token Tuple
 pTuple = delimited pVar (token ",")
+pStruct = token "{" *> separated pVar term <* token "}"
 
 pVar :: Rule Token (Type, Maybe String)
 pVar = (,) <$> pType <*> optional symbol
@@ -63,20 +63,27 @@ emitMembers = (\s -> "{"++s++"}") . intercalate " " . map ((++";") . emitVar)
 
 emitType :: Type -> String
 emitType = \case
-    Void          -> "void"
-    Type "int"    -> "int"
-    Type "uint"   -> "unsigned"
-    Type "float"  -> "float"
-    Type t        -> t
-    StructType y  -> "struct " ++ emitMembers y
-    ArrayType y n -> emitType y ++ "[" ++ maybe "" show n ++ "]"
-    FuncType y z  -> emitType (fromTuple z) ++ " (*)" ++ emitArgs y
+    Void            -> "void"
+    Type "int"      -> "int"
+    Type "uint"     -> "unsigned"
+    Type "float"    -> "double"
+    Type t          -> t
+    StructType ys   -> "struct " ++ emitMembers ys
+    y               -> emitVar (y, Nothing)
 
 emitVar :: (Type, Maybe String) -> String
 emitVar (y, name) = case y of
-    ArrayType y n -> emitType y ++ maybe "" (" "++) name
-                  ++ "[" ++ maybe "" show n ++ "]"
-    FuncType y z  -> emitType (fromTuple y) ++ " (*" ++ fromMaybe "" name ++ ")"
-                  ++ emitArgs z
-    y             -> emitType y ++ maybe "" (" "++) name
+    ArrayType y n -> emitType y ++ name' ++ "[" ++ n' ++ "]"
+      where
+        name' = fromMaybe "" ((" "++) <$> name)
+        n'    = fromMaybe "" (show <$> n)
+    FuncType y z -> rets ++ " (*" ++ name' ++ ")" ++ args
+      where
+        rets  = emitType (fromTuple y)
+        args  = emitArgs z
+        name' = fromMaybe "" name
+    y -> emitType y ++ name'
+      where
+        name' = fromMaybe "" ((" "++) <$> name)
+
 

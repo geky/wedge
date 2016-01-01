@@ -43,7 +43,11 @@ term :: Rule Token Token
 term = match Term
 
 token :: String -> Rule Token Token
-token t = match (Token t)
+token s' = rule $ \case
+    t@(Symbol s):ts | s == s' -> accept t ts
+    t@(Token s):ts  | s == s' -> accept t ts
+    _                         -> reject
+    
 
 
 -- Tokenizing rules
@@ -150,6 +154,7 @@ tokMultiComment = sum <$ matches "/*" <*> many comment <* matches "*/"
 tokenize :: Rule Char Token
 tokenize = rule $ \case
     '-':'>':cs          -> accept (Token "->") cs
+    '=':cs              -> accept (Token "=") cs
     '(':cs              -> accept (Token "(") cs
     ')':cs              -> accept (Token ")") cs
     '{':cs              -> accept (Token "{") cs

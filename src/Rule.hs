@@ -62,6 +62,14 @@ separated  r s = many s *> ((:) <$> r <*> rest <|> pure [])
 separated1 r s = many s *> ((:) <$> r <*> rest)
   where rest = s *> separated r s <|> pure []
 
+suffix, suffix1 :: Alternative f => f a -> f (a -> a) -> f a
+suffix  r s = r <**> (foldl (.) id <$> many s)
+suffix1 r s = suffix (r <**> s) s
+
+prefix, prefix1 :: Alternative f => f (a -> a) -> f a -> f a
+prefix  p r = (foldr (.) id <$> many p) <*> r
+prefix1 p r = prefix p (p <*> r)
+
 
 -- miscellaneous rules
 look :: Rule t a -> Rule t a
@@ -69,7 +77,7 @@ look x = Rule $ \c ts -> unrule x (c' c ts) ts
   where c' (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
 
 try :: Rule t a -> Rule t a
-try x = Rule $ \(a,r,_) -> unrule x (a,r,r)
+try x = Rule $ \(a,r,_) ts -> unrule x (a, \_ -> r ts, \_ -> r ts) ts
 
 current :: Rule t t
 current = look matchAny
