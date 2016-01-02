@@ -44,9 +44,11 @@ pType = suffix pBase pSuffix
     pNestSuffix = toFunc <$ token "->" <*> pTuple
       where toFunc rets args = [(FuncType args rets, Nothing)]
 
-pTuple, pStruct :: Rule Token Tuple
-pTuple = delimited pVar (token ",")
+pStruct, pTuple :: Rule Token Tuple
 pStruct = token "{" *> separated pVar term <* token "}"
+pTuple = rule $ \case
+    Token "(":_ -> token "(" *> pTuple <* token ")"
+    _           -> delimited pVar (token ",")
 
 pVar :: Rule Token (Type, Maybe String)
 pVar = (,) <$> pType <*> optional symbol

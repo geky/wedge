@@ -36,6 +36,8 @@ emitStmt = \case
     Expr e     -> [emitExpr e ++ ";"]
     Assign l r -> [emitExpr l ++ " = " ++ emitExpr r ++ ";"]
     Return e   -> ["return " ++ emitExpr e ++ ";"]
+    Break      -> ["break;"]
+    Continue   -> ["continue;"]
     If t l []  -> concat
         [ ["if (" ++ emitExpr t ++ ") {"]
         , emitBlock l
@@ -48,10 +50,16 @@ emitStmt = \case
         , emitBlock r
         , ["}"]
         ]
+    While t l  -> concat
+        [ ["while (" ++ emitExpr t ++ ") {"]
+        , emitBlock l
+        , ["}"]
+        ]
 
 emitExpr :: Expr -> String
-emitExpr (Call e es) = emitExpr e ++ "(" ++ args ++ ")"
+emitExpr (Call e es)   = emitExpr e ++ "(" ++ args ++ ")"
   where args = intercalate ", " $ map emitExpr es
+emitExpr (Access e s)  = emitExpr e ++ "." ++ s
 emitExpr (Var s)       = s
 emitExpr (IntLit i)    = show i
 emitExpr (FloatLit f)  = show f

@@ -71,7 +71,7 @@ prefix  p r = (foldr (.) id <$> many p) <*> r
 prefix1 p r = prefix p (p <*> r)
 
 
--- miscellaneous rules
+-- rule modifiers
 look :: Rule t a -> Rule t a
 look x = Rule $ \c ts -> unrule x (c' c ts) ts
   where c' (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
@@ -79,6 +79,8 @@ look x = Rule $ \c ts -> unrule x (c' c ts) ts
 try :: Rule t a -> Rule t a
 try x = Rule $ \(a,r,_) ts -> unrule x (a, \_ -> r ts, \_ -> r ts) ts
 
+
+-- general rules
 current :: Rule t t
 current = look matchAny
 

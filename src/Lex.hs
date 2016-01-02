@@ -162,6 +162,7 @@ tokenize = rule $ \case
     '[':cs              -> accept (Token "[") cs
     ']':cs              -> accept (Token "]") cs
     ',':cs              -> accept (Token ",") cs
+    '.':cs              -> accept (Token ".") cs
     c:_ | isAlpha c     -> tokSym
     c:_ | isDigit c     -> tokNum
     '\'':_              -> tokChar
