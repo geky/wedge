@@ -17,12 +17,14 @@ HFLAGS += -i$(SRCDIR) -odir $(TMPDIR) -hidir $(TMPDIR)
 
 all: $(TARGET)
 
+.PHONY: test
 test: $(TARGET)
-	./$(TARGET) test.w
-	cat test.lex
-	cat test.parse
-	cat test.h
-	cat test.c
+	make --no-print-directory -C test clean
+	make --no-print-directory -C test test.c
+	cat test/test.h
+	cat test/test.c
+	make --no-print-directory -C test all
+	test/test
 
 $(TARGET): $(SRC)
 	$(HC) $(HFLAGS) $(MAIN) -o $@

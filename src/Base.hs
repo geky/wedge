@@ -24,6 +24,7 @@ data Decl
     = Let String (Maybe Expr)
     | Typed Type (Maybe String) (Maybe Expr)
     | Fn Tuple (Maybe Tuple) String [Stmt]
+    | Import String
     deriving Show
 
 type Tree = [Decl]

@@ -12,7 +12,9 @@ import Base
 -- Parsing rules
 pDecl :: Rule Token Decl
 pDecl = rule $ \case
-    Symbol "fn":ts -> accept toFn ts
+    Symbol "import":ts -> accept Import ts
+      <*> symbol
+    Symbol "def":ts -> accept toFn ts
       <*> symbol
       <*> pTuple
       <*> optional (token "->" *> pTuple)
@@ -23,7 +25,7 @@ pDecl = rule $ \case
       <*> optional (token "=" *> pExpr)
     _ -> Typed
       <$> pType
-      <*> optional symbol
+      <*> (Just <$> symbol) -- TODO this can't be optional
       <*> optional (token "=" *> pExpr)
 
 pExpr :: Rule Token Expr
@@ -37,8 +39,8 @@ pExpr = suffix pPreExpr pPostExpr
         _           -> reject
 
     pPostExpr = rule $ \case
-        Token "(":_ -> flip Call <$
-            token "(" <*> delimited pExpr (token ",") <* token ")"
+        Token "(":_ -> flip Call
+          <$ token "(" <*> delimited pExpr (token ",") <* token ")"
         _           -> reject
 
 pBlock :: Rule Token [Stmt]

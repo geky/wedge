@@ -1,6 +1,7 @@
 module Emit where
 
 import Prelude hiding (lex)
+import Data.Char
 import Data.List
 import Data.Maybe
 import Type
@@ -8,26 +9,30 @@ import Base
 
 
 -- Emitting definitions
-emitTree :: Tree -> [String]
-emitTree = concat . map emitDecl
-
-emitDecl :: Decl -> [String]
-emitDecl = \case
-    (Fn a (Just r) name ss) -> concat
-        [ [emitType (fromTuple r) ++ " " ++ name ++ emitArgs a ++ " {"]
-        , emitBlock ss
-        , ["}"]
-        ]
-    (Typed y name e) -> [emitVar (y, name) ++ init ++ ";"]
-      where init = fromMaybe "" ((" = "++) . emitExpr <$> e)
-    _ -> undefined
+emitDecl :: String -> Decl -> [String]
+emitDecl "h" (Import name) =
+    ["#include <" ++ name ++ ".h>"]
+emitDecl "h" (Fn a (Just r) name _) =
+    [emitType (fromTuple r) ++ " " ++ name ++ emitArgs a ++ ";"]
+emitDecl "h" (Typed y name _) =
+    ["extern " ++ emitVar (y, name) ++ ";"]
+emitDecl "c" (Import _) = []
+emitDecl "c" (Fn a (Just r) name ss) = concat
+    [ [emitType (fromTuple r) ++ " " ++ name ++ emitArgs a ++ " {"]
+    , emitBlock ss
+    , ["}"]
+    ]
+emitDecl "c" (Typed y name e) =
+    [emitVar (y, name) ++ init ++ ";"]
+  where init = fromMaybe "" ((" = "++) . emitExpr <$> e)
+emitDecl _ _ = undefined
 
 emitBlock :: [Stmt] -> [String]
 emitBlock = map (replicate 4 ' ' ++) . concat . map emitStmt
 
 emitStmt :: Stmt -> [String]
 emitStmt = \case
-    Decl d     -> emitDecl d
+    Decl d     -> emitDecl "c" d
     Expr e     -> [emitExpr e ++ ";"]
     Assign l r -> [emitExpr l ++ " = " ++ emitExpr r ++ ";"]
     Return e   -> ["return " ++ emitExpr e ++ ";"]
@@ -50,12 +55,29 @@ emitExpr (Call e es) = emitExpr e ++ "(" ++ args ++ ")"
 emitExpr (Var s)       = s
 emitExpr (IntLit i)    = show i
 emitExpr (FloatLit f)  = show f
-emitExpr (ArrayLit es) = "{" ++ entries ++ "}"
+emitExpr (ArrayLit es) = "(char[]){" ++ entries ++ "}"
   where entries = intercalate ", " $ map emitExpr es
 
 
 -- Emit for different files
-emit :: String -> Tree -> String
-emit "h" = unlines . emitTree
-emit "c" = unlines . emitTree
-emit _   = undefined
+emit :: String -> String -> Tree -> String
+emit ext name
+  = unlines 
+  . (prefix ext ++) . (++ suffix ext)
+  . concat . map (emitDecl ext)
+  where
+    prefix "h" =
+        [ "#ifndef " ++ map toUpper name ++ "_H"
+        , "#define " ++ map toUpper name ++ "_H"
+        , ""
+        ]
+    prefix "c" =
+        [ "#include \"" ++ name ++ ".h\""
+        , ""
+        ]
+    prefix _   = undefined
+
+    suffix "h" = ["", "#endif"]
+    suffix "c" = []
+    suffix _   = undefined
+

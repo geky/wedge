@@ -8,19 +8,19 @@ import Emit
 
 
 ext :: String -> FilePath -> FilePath
-ext new path = rawpath ++ "." ++ new
-  where
-    old = ".w"
-    rawpath
-      | isSuffixOf old path = take (length path - length old) path
-      | otherwise           = path
+ext new path = name path ++ "." ++ new
+
+name :: String -> String
+name path
+  | isSuffixOf ".w" path = take (length path - length ".w") path
+  | otherwise            = path
 
 compile :: (FilePath, String) -> [(FilePath, String)]
 compile (file, input) =
     [ (ext "lex" file, unlines $ map show lexed)
     , (ext "parse" file, unlines $ map show parsed)
-    , (ext "h" file, emit "h" parsed)
-    , (ext "c" file, emit "c" parsed)
+    , (ext "h" file, emit "h" (name file) parsed)
+    , (ext "c" file, emit "c" (name file) parsed)
     ]
   where
     lexed = lex input
