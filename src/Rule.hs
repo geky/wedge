@@ -1,4 +1,4 @@
-module Rule where
+module Rule (many, optional, module Rule) where
 
 import Control.Applicative
 import Data.Maybe

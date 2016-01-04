@@ -1,11 +1,11 @@
 
+import Prelude hiding (lex)
 import System.Environment
 import Data.List
-import Prelude hiding (lex)
-import Lex
-import Parse
-import Emit
-import Var
+import Lex (lex)
+import Parse (parse)
+import Scope (scope)
+import Emit (emit)
 
 
 ext :: String -> FilePath -> FilePath
@@ -20,12 +20,14 @@ compile :: (FilePath, String) -> [(FilePath, String)]
 compile (file, input) =
     [ (ext "lex" file, unlines $ map show lexed)
     , (ext "parse" file, unlines $ map show parsed)
-    , (ext "h" file, emit "h" (name file) parsed)
-    , (ext "c" file, emit "c" (name file) parsed)
+    , (ext "scope" file, show scoped)
+    , (ext "h" file, emit "h" (name file) scoped)
+    , (ext "c" file, emit "c" (name file) scoped)
     ]
   where
     lexed = lex input
     parsed = parse input
+    scoped = scope parsed
 
 help :: String -> String
 help prog = "\

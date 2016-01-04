@@ -1,9 +1,9 @@
 import stdio
 
-int test
+int test = 1
 
-def fix(void) -> void {
-    test = 1+2 + 3+4
+def fix(int eh) -> void {
+    1+2 + 3+4
 }
 
 def +(int a, int b) -> int {
@@ -19,11 +19,12 @@ def !(int a) -> int {
 }
 
 def loop(void) -> void {
-    while (!(test)) {}
+    while (!(1)) {}
 }
 
 def main(void) -> int {
-    fix()
+    int a = 1
+    fix(a)
     printf("Hello World!\n\0")
     return 0
 }

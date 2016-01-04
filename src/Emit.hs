@@ -1,11 +1,18 @@
 module Emit where
 
 import Prelude hiding (lex)
+import Control.Arrow
 import Data.Char
 import Data.List
 import Data.Maybe
 import Type
-import Base
+import Scope
+  ( Expr(..)
+  , Stmt(..)
+  , Def(..)
+  , Import
+  , Module(..)
+  )
 
 
 -- Safe encoding to C symbols
@@ -17,83 +24,125 @@ escape = (concat.) $ map $ \case
 
 
 -- Emitting definitions
-emitDecl :: String -> Decl -> [String]
-emitDecl "h" (Import name) =
-    ["#include <" ++ name ++ ".h>"]
-emitDecl "h" (Def a (Just r) name _) =
-    [emitType (fromTuple r) ++ " " ++ escape name ++ emitArgs a ++ ";"]
-emitDecl "h" (Let (Right (y, name)) _) =
-    ["extern " ++ emitVar (y, escape <$> name) ++ ";"]
-emitDecl "c" (Import _) = []
-emitDecl "c" (Def a (Just r) name ss) = concat
-    [ [emitType (fromTuple r) ++ " " ++ escape name ++ emitArgs a ++ " {"]
-    , emitBlock ss
-    , ["}"]
-    ]
-emitDecl "c" (Let (Right (y, name)) e) =
-    [emitVar (y, escape <$> name) ++ init ++ ";"]
-  where init = fromMaybe "" ((" = "++) . emitExpr <$> e)
-emitDecl _ _ = undefined
+args :: Tuple -> String
+args = (\s -> "("++s++")") . \case
+    [] -> "void"
+    ys -> intercalate ", " $ map decl ys
 
-emitBlock :: [Stmt] -> [String]
-emitBlock = map (replicate 4 ' ' ++) . concat . map emitStmt
+members :: Tuple -> String
+members = (\s -> "{"++s++"}") . intercalate " " . map ((++";") . decl)
 
-emitStmt :: Stmt -> [String]
-emitStmt = \case
-    Decl d     -> emitDecl "c" d
-    Expr e     -> [emitExpr e ++ ";"]
-    Assign l r -> [emitExpr l ++ " = " ++ emitExpr r ++ ";"]
-    Return e   -> ["return " ++ emitExpr e ++ ";"]
+array :: Type -> Maybe Int -> Maybe String -> String
+array y n name = type' y ++ name' ++ "[" ++ n' ++ "]"
+  where
+    name' = fromMaybe "" ((" "++) <$> name)
+    n'    = fromMaybe "" (show <$> n)
+
+func :: Tuple -> Tuple -> Maybe String -> String
+func x y name = type' (fromTuple y) ++ " (*" ++ name' ++ ")" ++ args x
+  where name' = fromMaybe "" name
+
+type' :: Type -> String
+type' = \case
+    Void            -> "void"
+    Type "int"      -> "int"
+    Type "uint"     -> "unsigned"
+    Type "float"    -> "double"
+    Type t          -> t
+    StructType ys   -> "struct " ++ members ys
+    y               -> decl (y, Nothing)
+
+decl :: (Type, Maybe String) -> String
+decl (y, name) = case y of
+    ArrayType y n -> type' y ++ name' ++ "[" ++ n' ++ "]"
+      where n' = fromMaybe "" (show <$> n)
+    FuncType x y  -> type' (fromTuple y) ++ " (*" ++ name' ++ ")" ++ args x
+      where name' = fromMaybe "" name
+    y             -> type' y ++ name'
+  where name' = fromMaybe "" ((" "++) <$> name)
+
+expr :: Expr -> String
+expr = \case
+    Call e es   -> expr e ++ "(" ++ args ++ ")"
+      where args = intercalate ", " $ map expr es
+    Access e s  -> expr e ++ "." ++ s
+    Var s       -> escape s
+    IntLit i    -> show i
+    FloatLit f  -> show f
+    ArrayLit es -> "(char[]){" ++ entries ++ "}"
+      where entries = intercalate ", " $ map expr es
+
+stmt :: Stmt -> [String]
+stmt = \case
+    Expr e     -> [expr e ++ ";"]
+    Assign l r -> [expr l ++ " = " ++ expr r ++ ";"]
+    Return e   -> ["return " ++ expr e ++ ";"]
     Break      -> ["break;"]
     Continue   -> ["continue;"]
     If t l []  -> concat
-        [ ["if (" ++ emitExpr t ++ ") {"]
-        , emitBlock l
+        [ ["if (" ++ expr t ++ ") {"]
+        , block [] l
         , ["}"]
         ]
     If t l r   -> concat
-        [ ["if (" ++ emitExpr t ++ ") {"]
-        , emitBlock l
+        [ ["if (" ++ expr t ++ ") {"]
+        , block [] l
         , ["} else {"]
-        , emitBlock r
+        , block [] r
         , ["}"]
         ]
     While t l  -> concat
-        [ ["while (" ++ emitExpr t ++ ") {"]
-        , emitBlock l
+        [ ["while (" ++ expr t ++ ") {"]
+        , block [] l
         , ["}"]
         ]
 
-emitExpr :: Expr -> String
-emitExpr (Call e es)   = emitExpr e ++ "(" ++ args ++ ")"
-  where args = intercalate ", " $ map emitExpr es
-emitExpr (Access e s)  = emitExpr e ++ "." ++ s
-emitExpr (Var s)       = escape s
-emitExpr (IntLit i)    = show i
-emitExpr (FloatLit f)  = show f
-emitExpr (ArrayLit es) = "(char[]){" ++ entries ++ "}"
-  where entries = intercalate ", " $ map emitExpr es
+block ds ss = map (replicate 4 ' ' ++) $ decls ++ stmts
+  where
+    decls = case ds of
+        [] -> []
+        ds -> map ((++";") . decl . second Just) ds ++ [""]
+    stmts = concat $ map stmt ss
+
+import' :: Import -> [String]
+import' name = ["#include <" ++ name ++ ".h>"]
+
+def :: String -> Def -> [String]
+def "h" (Def (FuncType a r) name _ _) = 
+    [type' (fromTuple r) ++ " " ++ escape name ++ args a ++ ";"]
+def "c" (Def (FuncType a r) name ds ss) = concat
+    [ [type' (fromTuple r) ++ " " ++ escape name ++ args a ++ " {"]
+    , block ds ss
+    , ["}", ""]
+    ]
+def _ _ = undefined
 
 
 -- Emit for different files
-emit :: String -> String -> [Decl] -> String
-emit ext name
-  = unlines 
-  . (prefix ext ++) . (++ suffix ext)
-  . concat . map (emitDecl ext)
-  where
-    prefix "h" =
-        [ "#ifndef " ++ map toUpper name ++ "_H"
-        , "#define " ++ map toUpper name ++ "_H"
-        , ""
-        ]
-    prefix "c" =
-        [ "#include \"" ++ name ++ ".h\""
-        , ""
-        ]
-    prefix _   = undefined
+prefix :: String -> String -> [String]
+prefix "h" name =
+    [ "#ifndef " ++ map toUpper name ++ "_H"
+    , "#define " ++ map toUpper name ++ "_H"
+    , ""
+    ]
+prefix "c" name =
+    [ "#include \"" ++ name ++ ".h\""
+    , ""
+    ]
+prefix _ _  = undefined
 
-    suffix "h" = ["", "#endif"]
-    suffix "c" = []
-    suffix _   = undefined
+suffix :: String -> String -> [String]
+suffix "h" _ = ["", "#endif"]
+suffix "c" _ = []
+suffix _ _   = undefined
+
+emit :: String -> String -> Module -> String
+emit ext name (Module is ds) = unlines . concat $
+    [ prefix ext name
+    , if ext == "h" then concat $ map import' is else []
+    , [""]
+    , concat $ map (def ext) ds
+    , [""]
+    , suffix ext name
+    ]
 
