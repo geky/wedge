@@ -5,6 +5,7 @@ import Prelude hiding (lex)
 import Lex
 import Parse
 import Emit
+import Var
 
 
 ext :: String -> FilePath -> FilePath

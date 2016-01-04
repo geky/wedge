@@ -25,13 +25,10 @@ data Stmt
     deriving Show
 
 data Decl
-    = Let Expr (Maybe Expr)
-    | Typed Type (Maybe String) (Maybe Expr)
-    | Fn Tuple (Maybe Tuple) String [Stmt]
+    = Let (Either Expr (Type, Maybe String)) (Maybe Expr)
+    | Def Tuple (Maybe Tuple) String [Stmt]
     | Import String
     deriving Show
-
-type Tree = [Decl]
 
 
 indirect :: Expr -> Bool

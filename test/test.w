@@ -3,19 +3,23 @@ import stdio
 int test
 
 def fix(void) -> void {
-    test = 1
+    test = 1+2 + 3+4
 }
 
-def not(int a) -> int {
+def +(int a, int b) -> int {
+    return a
+}
+
+def !(int a) -> int {
     if (a) {
         return 0
     } else {
-        return 1
+        return (1)
     }
 }
 
 def loop(void) -> void {
-    while (not(test)) {}
+    while (!(test)) {}
 }
 
 def main(void) -> int {

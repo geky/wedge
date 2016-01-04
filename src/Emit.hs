@@ -8,22 +8,30 @@ import Type
 import Base
 
 
+-- Safe encoding to C symbols
+escape :: String -> String
+escape = (concat.) $ map $ \case
+  '+' -> "add"
+  '!' -> "not"
+  c   -> pure c
+
+
 -- Emitting definitions
 emitDecl :: String -> Decl -> [String]
 emitDecl "h" (Import name) =
     ["#include <" ++ name ++ ".h>"]
-emitDecl "h" (Fn a (Just r) name _) =
-    [emitType (fromTuple r) ++ " " ++ name ++ emitArgs a ++ ";"]
-emitDecl "h" (Typed y name _) =
-    ["extern " ++ emitVar (y, name) ++ ";"]
+emitDecl "h" (Def a (Just r) name _) =
+    [emitType (fromTuple r) ++ " " ++ escape name ++ emitArgs a ++ ";"]
+emitDecl "h" (Let (Right (y, name)) _) =
+    ["extern " ++ emitVar (y, escape <$> name) ++ ";"]
 emitDecl "c" (Import _) = []
-emitDecl "c" (Fn a (Just r) name ss) = concat
-    [ [emitType (fromTuple r) ++ " " ++ name ++ emitArgs a ++ " {"]
+emitDecl "c" (Def a (Just r) name ss) = concat
+    [ [emitType (fromTuple r) ++ " " ++ escape name ++ emitArgs a ++ " {"]
     , emitBlock ss
     , ["}"]
     ]
-emitDecl "c" (Typed y name e) =
-    [emitVar (y, name) ++ init ++ ";"]
+emitDecl "c" (Let (Right (y, name)) e) =
+    [emitVar (y, escape <$> name) ++ init ++ ";"]
   where init = fromMaybe "" ((" = "++) . emitExpr <$> e)
 emitDecl _ _ = undefined
 
@@ -60,7 +68,7 @@ emitExpr :: Expr -> String
 emitExpr (Call e es)   = emitExpr e ++ "(" ++ args ++ ")"
   where args = intercalate ", " $ map emitExpr es
 emitExpr (Access e s)  = emitExpr e ++ "." ++ s
-emitExpr (Var s)       = s
+emitExpr (Var s)       = escape s
 emitExpr (IntLit i)    = show i
 emitExpr (FloatLit f)  = show f
 emitExpr (ArrayLit es) = "(char[]){" ++ entries ++ "}"
@@ -68,7 +76,7 @@ emitExpr (ArrayLit es) = "(char[]){" ++ entries ++ "}"
 
 
 -- Emit for different files
-emit :: String -> String -> Tree -> String
+emit :: String -> String -> [Decl] -> String
 emit ext name
   = unlines 
   . (prefix ext ++) . (++ suffix ext)

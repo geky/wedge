@@ -10,6 +10,7 @@ import Rule
 -- Token definitions
 data Token
     = Symbol String
+    | Op String Int
     | Int Int
     | Float Double
     | String String
@@ -17,12 +18,21 @@ data Token
     | Token String
     deriving (Show, Eq)
 
+incPrec :: Token -> Token
+incPrec (Op s p) = Op s (p+1)
+incPrec t        = t
+
 
 -- Token matching rules
 symbol :: Rule Token String
 symbol = rule $ \case
     Symbol s:ts -> accept s ts
     _           -> reject
+
+op :: Rule Token String
+op = rule $ \case
+    Op s _:ts -> accept s ts
+    _         -> reject
 
 int :: Rule Token Int
 int = rule $ \case
@@ -45,6 +55,7 @@ term = match Term
 token :: String -> Rule Token Token
 token s' = rule $ \case
     t@(Symbol s):ts | s == s' -> accept t ts
+    t@(Op s _):ts   | s == s' -> accept t ts
     t@(Token s):ts  | s == s' -> accept t ts
     _                         -> reject
     
@@ -53,6 +64,12 @@ token s' = rule $ \case
 -- Tokenizing rules
 tokSym :: Rule Char Token
 tokSym = Symbol <$> many1 (matchIf isAlphaNum)
+
+tokOp :: Rule Char Token
+tokOp = flip Op 0 <$> many1 (matchIf isOp)
+
+isOp :: Char -> Bool
+isOp = flip elem "~!@#$%^&*-=+<>?/\\."
 
 tokDigit :: Num n => Int -> Rule Char n
 tokDigit base = fromIntegral . digitToInt <$> matchIf isBase
@@ -72,16 +89,14 @@ tokBase = rule $ \case
     cs                     -> accept 10 cs
 
 tokInt :: Num n => Int -> Rule Char n
-tokInt base = toInt base <$> many1 (tokDigit base)
-  where
-    toInt base' = foldr1 (\a b -> a + b*base)
-      where base = fromIntegral base'
+tokInt base = foldr1 (\a b -> a + b*base') <$> many1 (tokDigit base)
+  where base' = fromIntegral base
 
 tokFrac :: Fractional n => Int -> Rule Char n
-tokFrac base = toFrac base <$ match '.' <*> many1 (tokDigit base)
-  where
-    toFrac base' = (/base) . foldr1 (\a b -> a + b/base)
-      where base = fromIntegral base'
+tokFrac base = (/base') . foldr1 (\a b -> a + b/base')
+  <$  match '.'
+  <*> many1 (tokDigit base)
+  where base' = fromIntegral base
 
 tokExp :: Fractional n => Rule Char n
 tokExp = (^^) <$> tokE <*> (tokSign <*> tokInt 10)
@@ -109,8 +124,8 @@ tokNum = do
 
 
 tokEscape :: Int -> Int -> Rule Char Char
-tokEscape count base = toChar <$> replicateM count (tokDigit base)
-  where toChar = chr . foldr1 (\a b -> a + b*base)
+tokEscape count base = chr . foldr1 (\a b -> a + b*base)
+  <$> replicateM count (tokDigit base)
 
 tokC :: Char -> Rule Char Char
 tokC q = rule $ \case
@@ -164,13 +179,14 @@ tokenize = rule $ \case
     ',':cs              -> accept (Token ",") cs
     '.':cs              -> accept (Token ".") cs
     c:_ | isAlpha c     -> tokSym
+    c:_ | isOp c        -> tokOp
     c:_ | isDigit c     -> tokNum
     '\'':_              -> tokChar
     '\"':_              -> tokString
     c:cs | elem c ";\n" -> accept Term cs
     '/':'/':_           -> tokSingleComment *> tokenize
     '/':'*':_           -> tokMultiComment  *> tokenize
-    c:_ | isSpace c     -> matchAny *> tokenize
+    c:_ | isSpace c     -> incPrec <$ matchAny <*> tokenize
     _                   -> reject
 
 tokLines :: Rule Char Line

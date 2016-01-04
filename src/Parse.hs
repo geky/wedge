@@ -10,39 +10,52 @@ import Base
 
 
 -- Parsing rules
+pImport :: Rule Token Decl
+pImport = Import <$ token "import" <*> symbol
+
+pDef :: Rule Token Decl
+pDef = (\name args rets -> Def args rets name)
+  <$  token "def" <*> (symbol <|> op)
+  <*> pTuple <*> optional (token "->" *> pTuple)
+  <*> pBlock
+
+pLet :: Rule Token Decl
+pLet = Let
+  <$> (   Left  <$  token "let" <*> pExpr 
+      <|> Right <$> ((,) <$> pType <*> (Just <$> symbol)))
+      -- TODO fix this in pVar
+  <*> optional (token "=" *> pExpr)
+
 pDecl :: Rule Token Decl
 pDecl = rule $ \case
-    Symbol "import":ts -> accept Import ts
-      <*> symbol
-    Symbol "def":ts -> accept toFn ts
-      <*> symbol
-      <*> pTuple
-      <*> optional (token "->" *> pTuple)
-      <*> pBlock
-      where toFn name args rets = Fn args rets name
-    Symbol "let":ts -> accept Let ts
-      <*> pExpr
-      <*> optional (token "=" *> pExpr)
-    _ -> Typed
-      <$> pType
-      <*> (Just <$> symbol) -- TODO this can't be optional
-      <*> optional (token "=" *> pExpr)
+    Symbol "import":_ -> pImport
+    Symbol "def":_    -> pDef
+    _                 -> pLet
 
 pExpr :: Rule Token Expr
-pExpr = suffix pPreExpr pPostExpr
+pExpr = pSubExpr maxBound
+
+pSubExpr :: Int -> Rule Token Expr
+pSubExpr prec = suffix pPreExpr pPostExpr
   where
     pPreExpr = rule $ \case
-        Symbol s:ts -> accept (Var s) ts
-        Int i:ts    -> accept (IntLit i) ts
-        Float f:ts  -> accept (FloatLit f) ts
-        String s:ts -> accept (ArrayLit $ map (IntLit . ord) s) ts
-        _           -> reject
+        Token "(":_  -> token "(" *> pExpr <* token ")"
+        Op s prec':_ -> Call (Var s) . pure <$ op <*> pSubExpr prec'
+        Symbol s:ts  -> accept (Var s) ts
+        Int i:ts     -> accept (IntLit i) ts
+        Float f:ts   -> accept (FloatLit f) ts
+        String s:ts  -> accept (ArrayLit $ map (IntLit . ord) s) ts
+        _            -> reject
 
     pPostExpr = rule $ \case
-        Token "(":ts -> accept (flip Call) ts 
-            <*> delimited pExpr (token ",")
-            <* token ")"
-        Token ".":ts -> accept (flip Access) ts <*> symbol
+        Token "(":_ -> flip Call
+          <$  token "("
+          <*> delimited pExpr (token ",")
+          <*  token ")"
+        Token ".":_ -> flip Access
+          <$  token "." <*> symbol
+        Op s prec':_ | prec > prec' -> (\b a -> Call (Var s) [a,b])
+          <$  op <*> pSubExpr prec'
         _            -> reject
 
 pBlock :: Rule Token [Stmt]
@@ -83,11 +96,11 @@ pStmt = rule $ \case
     Symbol "break":_    -> pBreak
     Symbol "continue":_ -> pContinue
     _                   ->
-          try (Decl <$> pDecl)
+          try (Decl <$> pLet <* look term)
       <|> pExpr <**> (flip Assign <$ token "=" <*> pExpr <|> pure Expr)
 
 
 -- Parsing entry point
-parse :: String -> Tree
+parse :: String -> [Decl]
 parse cs = run (separated pDecl term) (lex cs) (lexLines cs)
 

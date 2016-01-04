@@ -63,7 +63,7 @@ separated1 r s = many s *> ((:) <$> r <*> rest)
   where rest = s *> separated r s <|> pure []
 
 suffix, suffix1 :: Alternative f => f a -> f (a -> a) -> f a
-suffix  r s = r <**> (foldl (.) id <$> many s)
+suffix  r s = r <**> (foldl (flip (.)) id <$> many s)
 suffix1 r s = suffix (r <**> s) s
 
 prefix, prefix1 :: Alternative f => f (a -> a) -> f a -> f a
