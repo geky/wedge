@@ -1,13 +1,14 @@
 module Rule (many, optional, module Rule) where
 
 import Control.Applicative
+import Control.Monad
 import Data.Maybe
 import Data.List
 
 
 -- Rule definition and operations
 newtype Rule t a = Rule
-    { unrule :: forall b . 
+    { unrule :: forall b .
         ( a -> [t] -> b -- accept
         ,      [t] -> b -- reject
         ,      [t] -> b -- fail
@@ -29,19 +30,20 @@ instance Functor (Rule t) where
 
 instance Applicative (Rule t) where
     pure = rule . accept
-
     x <*> y = Rule $ \(a,r,e) -> unrule x (\f -> unrule y (a.f,e,e), r, e)
 
 instance Alternative (Rule t) where
     empty = reject
-
     x <|> y = Rule $ \(a,r,e) -> unrule x (a, unrule y (a,r,e), e)
 
 instance Monad (Rule t) where
     return = pure
     fail _ = empty
-
     x >>= y = Rule $ \(a,r,e) -> unrule x (\z -> unrule (y z) (a,e,e), r, e)
+
+instance MonadPlus (Rule t) where
+    mzero = empty
+    mplus = (<|>)
 
 
 -- many is already defined in Control.Applicative
@@ -73,11 +75,17 @@ prefix1 p r = prefix p (p <*> r)
 
 -- rule modifiers
 look :: Rule t a -> Rule t a
-look x = Rule $ \c ts -> unrule x (c' c ts) ts
-  where c' (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
+look x = Rule $ \c ts -> unrule x (new c ts) ts
+  where new (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
 
 try :: Rule t a -> Rule t a
 try x = Rule $ \(a,r,_) ts -> unrule x (a, \_ -> r ts, \_ -> r ts) ts
+
+over :: (t0 -> t1) -> Rule t1 a -> Rule t0 a
+over f x = Rule $ \c ts -> unrule x (new c ts) (map f ts)
+  where
+    new (a,r,e) ts = (\z -> a z . up ts, r . up ts, e . up ts)
+    up ts ts' = drop (length ts - length ts') ts
 
 
 -- general rules
@@ -105,22 +113,9 @@ matchMaybe f = fromJust . f <$> matchIf (isJust . f)
 
 
 -- Running the actual rules
-runEither :: Rule t a -> [t] -> Either [t] a
-runEither r ts = unrule r (end, Left, Left) ts
+run :: Rule t a -> ([t] -> a) -> [t] -> a
+run r fail = unrule r (end, fail, fail)
   where
-    end a [] = Right a
-    end _ ts = Left ts
-
-
-type Line = Int
-
-unexpected :: Show t => [t] -> [Line] -> a
-unexpected ts ls = error $ "unexpected " ++ case (ts, ls) of
-    (t:_, l:_) -> show t ++ " on line " ++ show (l + 1)
-    _          -> "end of input"
-
-run :: Show t => Rule t a -> [t] -> [Line] -> a
-run r ts ls = case runEither r ts of
-    Left ts' -> unexpected ts' $ drop (length ts-length ts'+1) ls
-    Right a  -> a
+    end a [] = a
+    end _ ts = fail ts
 

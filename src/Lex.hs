@@ -1,36 +1,64 @@
 module Lex where
 
-import Prelude hiding (lex, exp)
+import Prelude hiding (lex, exp, lines)
 import Control.Applicative
 import Control.Monad
 import Data.Char
 import Rule
+import File
 
 
 -- Token definitions
 data Token
-    = Symbol String
-    | Op String Int
-    | Int Int
-    | Float Double
-    | String String
-    | Term
-    | Token String
-    deriving (Show, Eq)
+    = Symbol String Pos
+    | Op String Int Pos
+    | Int Int       Pos
+    | Float Double  Pos
+    | String String Pos
+    | Term          Pos
+    | Token String  Pos
 
-incp :: Token -> Token
-incp (Op s p) = Op s (p+1)
-incp t        = t
+instance Eq Token where
+    Symbol a _ == Symbol b _ = a == b
+    Op a _ _   == Op b _ _   = a == b
+    Int a _    == Int b _    = a == b
+    Float a _  == Float b _  = a == b
+    String a _ == String b _ = a == b
+    Term _     == Term _     = True
+    Token a _  == Token b _  = a == b
+    _          == _          = False
+
+instance Positional Token where
+    getPos (Symbol _ p) = p
+    getPos (Op _ _   p) = p
+    getPos (Int _    p) = p
+    getPos (Float _  p) = p
+    getPos (String _ p) = p
+    getPos (Term     p) = p
+    getPos (Token _  p) = p
+
+instance Show Token where
+    show (Symbol t _) = "symbol " ++ show t
+    show (Op t _ _)   = "op "     ++ show t
+    show (Int t _)    = "int "    ++ show t
+    show (Float t _)  = "float "  ++ show t
+    show (String t _) = "string " ++ show t
+    show (Term _)     = "term"
+    show (Token t _)  = "token "  ++ show t
+
+incPrec :: Token -> Token
+incPrec (Op s l p) = Op s (l+1) p
+incPrec t          = t
 
 
 -- Tokenizing rules
-symbol :: Rule Char Token
+symbol :: Rule Char (Pos -> Token)
 symbol = Symbol <$> many1 (matchIf isAlphaNum)
 
 isOp :: Char -> Bool
 isOp = flip elem "~!@#$%^&*-=+<>?/\\."
 
-op :: Rule Char Token
+op :: Rule Char (Pos -> Token)
 op = flip Op 0 <$> many1 (matchIf isOp)
 
 digit :: Num n => Int -> Rule Char n
@@ -68,7 +96,7 @@ exp = (^^) <$> e <*> (sign <*> int 10)
         c:cs | elem c "pP" -> accept 2 cs
         _                  -> reject
 
-num :: Rule Char Token
+num :: Rule Char (Pos -> Token)
 num = do
     sign <- sign
     base <- base
@@ -109,10 +137,10 @@ c q = rule $ \case
     c:cs | c /= q -> accept c cs
     _             -> reject
 
-char :: Rule Char Token
+char :: Rule Char (Pos -> Token)
 char = Int . ord <$ match '\'' <*> c '\'' <* match '\''
 
-string :: Rule Char Token
+string :: Rule Char (Pos -> Token)
 string = String <$ match '\"' <*> many (c '\"') <* match '\"'
 
 singleComment :: Rule Char Line
@@ -128,7 +156,8 @@ multiComment = sum <$ matches "/*" <*> many comment <* matches "*/"
         _:cs      -> accept 0 cs
         _         -> reject
 
-tokenize :: Rule Char Token
+
+tokenize :: Rule Char (Pos -> Token)
 tokenize = rule $ \case
     '-':'>':cs          -> accept (Token "->") cs
     '=':cs              -> accept (Token "=") cs
@@ -148,24 +177,19 @@ tokenize = rule $ \case
     c:cs | elem c ";\n" -> accept Term cs
     '/':'/':_           -> singleComment *> tokenize
     '/':'*':_           -> multiComment  *> tokenize
-    c:_ | isSpace c     -> incp <$ matchAny <*> tokenize
+    c:cs | isSpace c    -> accept (fmap incPrec) cs <*> tokenize
     _                   -> reject
 
-tokLines :: Rule Char Line
-tokLines = rule $ \case
-    '\n':cs         -> accept 1 cs
-    '/':'/':_       -> (+) <$> singleComment <*> tokLines
-    '/':'*':_       -> (+) <$> multiComment  <*> tokLines
-    c:_ | isSpace c -> matchAny *> tokLines
-    _               -> 0 <$ tokenize
 
+-- Lexing entry point
+apply :: Rule a (n -> b) -> Rule (a, n) b
+apply r = rule $ \case
+    (_,p):_ -> ($p) <$> over fst r
+    _       -> reject
 
-charLines :: String -> [Line]
-charLines = (0:) . scanl1 (+) . map (\c -> if c == '\n' then 1 else 0)
-
-lex :: String -> [Token]
-lex cs = run (many tokenize) cs (charLines cs)
-
-lexLines :: String -> [Line]
-lexLines cs = (0:) $ scanl1 (+) $ run (many tokLines) cs (charLines cs)
+lex :: FilePath -> [String] -> [Token]
+lex fp cs 
+  = run (many $ apply tokenize) err 
+  $ zip (unlines cs) (posLines fp cs)
+  where err = unexpected fp $ show . fst
 

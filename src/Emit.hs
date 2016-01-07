@@ -1,6 +1,7 @@
 module Emit where
 
 import Prelude hiding (lex)
+import System.FilePath
 import Control.Arrow
 import Data.Char
 import Data.List
@@ -119,14 +120,17 @@ def _ _ = undefined
 
 
 -- Emit for different files
+gaurd :: String -> String
+gaurd = (++"_H") . map toUpper . takeBaseName
+
 prefix :: String -> String -> [String]
 prefix "h" name =
-    [ "#ifndef " ++ map toUpper name ++ "_H"
-    , "#define " ++ map toUpper name ++ "_H"
+    [ "#ifndef " ++ gaurd name
+    , "#define " ++ gaurd name
     , ""
     ]
 prefix "c" name =
-    [ "#include \"" ++ name ++ ".h\""
+    [ "#include \"" ++ (name -<.> "h") ++ "\""
     , ""
     ]
 prefix _ _  = undefined
@@ -136,8 +140,8 @@ suffix "h" _ = ["", "#endif"]
 suffix "c" _ = []
 suffix _ _   = undefined
 
-emit :: String -> String -> Module -> String
-emit ext name (Module is ds) = unlines . concat $
+emitExt :: String -> FilePath -> Module -> [String]
+emitExt ext name (Module is ds) = concat
     [ prefix ext name
     , if ext == "h" then concat $ map import' is else []
     , [""]
@@ -145,4 +149,7 @@ emit ext name (Module is ds) = unlines . concat $
     , [""]
     , suffix ext name
     ]
+
+emit :: FilePath -> Module -> [(FilePath, [String])]
+emit fp m = map (\x -> (fp -<.> x, emitExt x fp m)) ["h", "c"]
 

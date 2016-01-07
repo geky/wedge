@@ -1,33 +1,51 @@
 
-import Prelude hiding (lex)
+import Prelude hiding (lex, read, const)
 import System.Environment
-import Data.List
-import Lex (lex)
-import Parse (parse)
-import Scope (scope)
-import Emit (emit)
+import System.Exit
+import Control.Exception
+import Control.Arrow
+import Control.Monad
+import qualified Lex   as L
+import qualified Parse as P
+import qualified Scope as S
+import qualified Emit  as E
+import Stage
 
 
-ext :: String -> FilePath -> FilePath
-ext new path = name path ++ "." ++ new
+-- Compilation stages
+lex   :: Stage (FilePath, [String])  (FilePath, [L.Token])
+parse :: Stage (FilePath, [L.Token]) (FilePath, P.Tree)
+scope :: Stage (FilePath, P.Tree)    (FilePath, S.Module)
+emit  :: Stage (FilePath, S.Module)  [(FilePath, [String])]
 
-name :: String -> String
-name path
-  | isSuffixOf ".w" path = take (length path - length ".w") path
-  | otherwise            = path
+lex   = stage $ fst &&& uncurry L.lex
+parse = stage $ fst &&& uncurry P.parse
+scope = stage $ second S.scope
+emit  = stage $ uncurry E.emit
 
-compile :: (FilePath, String) -> [(FilePath, String)]
-compile (file, input) =
-    [ (ext "lex" file, unlines $ map show lexed)
-    , (ext "parse" file, unlines $ map show parsed)
-    , (ext "scope" file, show scoped)
-    , (ext "h" file, emit "h" (name file) scoped)
-    , (ext "c" file, emit "c" (name file) scoped)
-    ]
-  where
-    lexed = lex input
-    parsed = parse input
-    scoped = scope parsed
+compile :: Stage (FilePath, [String]) [(FilePath, [String])]
+compile
+  =   lex   >>> dump "lex"
+  >>> parse >>> dump "parse"
+  >>> scope >>> dump "scope"
+  >>> emit
+
+compileFile :: FilePath -> IO ()
+compileFile fp = pipe fp
+  $   read
+  >>> compile
+  >>> mapA_ write
+
+
+-- Program entry point
+data Status
+  = OK
+  | BadArgs
+  | BadCompile
+  deriving (Show, Enum)
+
+exit :: Status -> IO a
+exit = exitWith . ExitFailure . fromEnum
 
 help :: String -> String
 help prog = "\
@@ -37,10 +55,14 @@ help prog = "\
 main :: IO ()
 main = do
     args <- getArgs
+    when (length args /= 1) $ do
+        prog <- help <$> getProgName
+        putStr prog
+        exit BadArgs
 
-    if length args /= 1 then do
-        prog <- getProgName
-        putStr (help prog)
-    else do
-        input <- readFile (head args)
-        mapM_ (uncurry writeFile) $ compile (head args, input)
+    try (compileFile $ head args) >>= \case
+        Right a                    -> return a
+        Left (ex :: SomeException) -> do
+            putStr $ "\n" ++ show ex ++ "\n"
+            exit BadCompile
+

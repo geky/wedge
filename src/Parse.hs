@@ -5,8 +5,8 @@ import Control.Applicative
 import Data.Char
 import Rule
 import Type
+import File
 import Lex (Token(..))
-import qualified Lex as L
 
 
 -- Parse tree definitions
@@ -42,38 +42,40 @@ type Tree = [Decl]
 -- General token matching rules
 symbol :: Rule Token String
 symbol = rule $ \case
-    Symbol s:ts -> accept s ts
-    _           -> reject
+    Symbol s _:ts -> accept s ts
+    _             -> reject
 
 op :: Rule Token String
 op = rule $ \case
-    Op s _:ts -> accept s ts
-    _         -> reject
+    Op s _ _:ts -> accept s ts
+    _           -> reject
 
 int :: Rule Token Int
 int = rule $ \case
-    Int i:ts -> accept i ts
-    _        -> reject
+    Int i _:ts -> accept i ts
+    _          -> reject
 
 float :: Rule Token Double
 float = rule $ \case
-    Float f:ts -> accept f ts
-    _          -> reject
+    Float f _:ts -> accept f ts
+    _            -> reject
 
 string :: Rule Token String
 string = rule $ \case
-    String s:ts -> accept s ts
-    _           -> reject
+    String s _:ts -> accept s ts
+    _             -> reject
 
-term :: Rule Token Token
-term = match Term
+term :: Rule Token ()
+term = rule $ \case
+    Term _:ts -> accept () ts
+    _         -> reject
 
 token :: String -> Rule Token Token
 token s' = rule $ \case
-    t@(Symbol s):ts | s == s' -> accept t ts
-    t@(Op s _):ts   | s == s' -> accept t ts
-    t@(Token s):ts  | s == s' -> accept t ts
-    _                         -> reject
+    t@(Symbol s _):ts | s == s' -> accept t ts
+    t@(Op s _ _):ts   | s == s' -> accept t ts
+    t@(Token s _):ts  | s == s' -> accept t ts
+    _                           -> reject
 
 
 -- Parsing rules
@@ -81,11 +83,11 @@ type' :: Rule Token Type
 type' = suffix base baseSuffix
   where
     base = rule $ \case
-        Symbol "void":ts -> accept Void ts
-        Token "(":_      -> fromTuple <$> nested
-        Token "{":_      -> fromTuple <$> struct
-        Symbol s:ts      -> accept (Type s) ts
-        _                -> reject
+        Symbol "void" _:ts -> accept Void ts
+        Token "(" _:_      -> fromTuple <$> nested
+        Token "{" _:_      -> fromTuple <$> struct
+        Symbol s _:ts      -> accept (Type s) ts
+        _                  -> reject
 
     baseSuffix = flip ArrayType <$ token "[" <*> optional int <* token "]"
 
@@ -96,8 +98,8 @@ type' = suffix base baseSuffix
 struct, tuple :: Rule Token Tuple
 struct = token "{" *> separated var term <* token "}"
 tuple = rule $ \case
-    Token "(":_ -> token "(" *> tuple <* token ")"
-    _           -> delimited var (token ",")
+    Token "(" _:_ -> token "(" *> tuple <* token ")"
+    _             -> delimited var (token ",")
 
 var :: Rule Token (Type, Maybe String)
 var = (,) <$> type' <*> optional symbol
@@ -120,9 +122,9 @@ let' = Let
 
 decl :: Rule Token Decl
 decl = rule $ \case
-    Symbol "import":_ -> import'
-    Symbol "def":_    -> def
-    _                 -> let'
+    Symbol "import" _:_ -> import'
+    Symbol "def" _:_    -> def
+    _                   -> let'
 
 expr :: Rule Token Expr
 expr = subExpr maxBound
@@ -131,22 +133,22 @@ subExpr :: Int -> Rule Token Expr
 subExpr rec = suffix preExpr postExpr
   where
     preExpr = rule $ \case
-        Token "(":_  -> token "(" *> expr <* token ")"
-        Op s rec':_ -> Call (Var s) . pure <$ op <*> subExpr rec'
-        Symbol s:ts  -> accept (Var s) ts
-        Int i:ts     -> accept (IntLit i) ts
-        Float f:ts   -> accept (FloatLit f) ts
-        String s:ts  -> accept (ArrayLit $ map (IntLit . ord) s) ts
-        _            -> reject
+        Token "(" _:_  -> token "(" *> expr <* token ")"
+        Op s rec' _:_  -> Call (Var s) . pure <$ op <*> subExpr rec'
+        Symbol s _:ts  -> accept (Var s) ts
+        Int i _:ts     -> accept (IntLit i) ts
+        Float f _:ts   -> accept (FloatLit f) ts
+        String s _:ts  -> accept (ArrayLit $ map (IntLit . ord) s) ts
+        _              -> reject
 
     postExpr = rule $ \case
-        Token "(":_ -> flip Call
+        Token "(" _:_ -> flip Call
           <$  token "("
           <*> delimited expr (token ",")
           <*  token ")"
-        Token ".":_ -> flip Access
+        Token "." _:_ -> flip Access
           <$  token "." <*> symbol
-        Op s rec':_ | rec > rec' -> (\b a -> Call (Var s) [a,b])
+        Op s rec' _:_ | rec > rec' -> (\b a -> Call (Var s) [a,b])
           <$  op <*> subExpr rec'
         _            -> reject
 
@@ -154,8 +156,8 @@ block :: Rule Token [Stmt]
 block = concat <$ token "{" <*> separated nested term <* token "}"
   where
     nested = rule $ \case
-        Token "{":_ -> block
-        _           -> pure <$> stmt
+        Token "{" _:_ -> block
+        _             -> pure <$> stmt
 
 if' :: Rule Token Stmt
 if' = If 
@@ -182,17 +184,18 @@ assign = Assign <$> expr <* token "=" <*> expr
 
 stmt :: Rule Token Stmt
 stmt = rule $ \case
-    Symbol "if":_       -> if'
-    Symbol "while":_    -> while
-    Symbol "return":_   -> return
-    Symbol "break":_    -> break
-    Symbol "continue":_ -> continue
-    _                   ->
+    Symbol "if" _:_       -> if'
+    Symbol "while" _:_    -> while
+    Symbol "return" _:_   -> return
+    Symbol "break" _:_    -> break
+    Symbol "continue" _:_ -> continue
+    _                     ->
           try (Decl <$> let' <* look term)
       <|> expr <**> (flip Assign <$ token "=" <*> expr <|> pure Expr)
 
 
 -- Parsing entry oint
-parse :: String -> Tree
-parse cs = run (separated decl term) (L.lex cs) (L.lexLines cs)
+parse :: FilePath -> [Token] -> Tree
+parse fp = run (separated decl term) err
+  where err = unexpected fp show
 
