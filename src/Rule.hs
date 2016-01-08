@@ -87,6 +87,11 @@ over f x = Rule $ \c ts -> unrule x (new c ts) (map f ts)
     new (a,r,e) ts = (\z -> a z . up ts, r . up ts, e . up ts)
     up ts ts' = drop (length ts - length ts') ts
 
+propagate :: (t -> a) -> Rule t (a -> b) -> Rule t b
+propagate f x = rule $ \case
+    t:_ -> ($ f t) <$> x
+    _   -> reject
+
 
 -- general rules
 current :: Rule t t

@@ -117,8 +117,8 @@ escape :: Int -> Int -> Rule Char Char
 escape count base = chr . foldr1 (\a b -> a + b*base)
   <$> replicateM count (digit base)
 
-c :: Char -> Rule Char Char
-c q = rule $ \case
+character :: Char -> Rule Char Char
+character q = rule $ \case
     '\\':'\\':cs  -> accept '\\' cs
     '\\':'\'':cs  -> accept '\'' cs
     '\\':'\"':cs  -> accept '\"' cs
@@ -138,10 +138,10 @@ c q = rule $ \case
     _             -> reject
 
 char :: Rule Char (Pos -> Token)
-char = Int . ord <$ match '\'' <*> c '\'' <* match '\''
+char = Int . ord <$ match '\'' <*> character '\'' <* match '\''
 
 string :: Rule Char (Pos -> Token)
-string = String <$ match '\"' <*> many (c '\"') <* match '\"'
+string = String <$ match '\"' <*> many (character '\"') <* match '\"'
 
 singleComment :: Rule Char Line
 singleComment = 0 <$ matches "//" <* many (matchIf (/= '\n'))
@@ -182,14 +182,9 @@ tokenize = rule $ \case
 
 
 -- Lexing entry point
-apply :: Rule a (n -> b) -> Rule (a, n) b
-apply r = rule $ \case
-    (_,p):_ -> ($p) <$> over fst r
-    _       -> reject
-
 lex :: FilePath -> [String] -> [Token]
 lex fp cs 
-  = run (many $ apply tokenize) err 
+  = run (many $ propagate snd $ over fst $ tokenize) err
   $ zip (unlines cs) (posLines fp cs)
   where err = unexpected fp $ show . fst
 

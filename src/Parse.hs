@@ -20,23 +20,47 @@ data Expr
     deriving Show
 
 data Stmt
-    = Decl Decl
-    | Expr Expr
-    | Assign Expr Expr
-    | If Expr [Stmt] [Stmt]
-    | While Expr [Stmt]
-    | Return Expr
-    | Break
-    | Continue
+    = Decl Decl             Pos
+    | Expr Expr             Pos
+    | Assign Expr Expr      Pos
+    | If Expr [Stmt] [Stmt] Pos
+    | While Expr [Stmt]     Pos
+    | Return Expr           Pos
+    | Break                 Pos
+    | Continue              Pos
     deriving Show
 
 data Decl
-    = Let (Either Expr (Type, Maybe String)) (Maybe Expr)
-    | Def Tuple (Maybe Tuple) String [Stmt]
-    | Import String
+    = Let (Either Expr (Type, Maybe String)) (Maybe Expr) Pos
+    | Def Tuple (Maybe Tuple) String [Stmt]               Pos
+    | Import String                                       Pos
     deriving Show
 
 type Tree = [Decl]
+
+--
+--instance Positional Expr where
+--    getPos (Call _ _   p) = p
+--    getPos (Access _ _ p) = p
+--    getPos (Var _      p) = p
+--    getPos (IntLit _   p) = p
+--    getPos (FloatLit _ p) = p
+--    getPos (ArrayLit _ p) = p
+--
+instance Positional Stmt where
+    getPos (Decl _     p) = p
+    getPos (Expr _     p) = p
+    getPos (Assign _ _ p) = p
+    getPos (If _ _ _   p) = p
+    getPos (While _ _  p) = p
+    getPos (Return _   p) = p
+    getPos (Break      p) = p
+    getPos (Continue   p) = p
+
+instance Positional Decl where
+    getPos (Let _ _     p) = p
+    getPos (Def _ _ _ _ p) = p
+    getPos (Import _    p) = p
 
 
 -- General token matching rules
@@ -104,16 +128,17 @@ tuple = rule $ \case
 var :: Rule Token (Type, Maybe String)
 var = (,) <$> type' <*> optional symbol
 
-import' :: Rule Token Decl
-import' = Import <$ token "import" <*> symbol
+import' :: Rule Token (Pos -> Decl)
+import' = Import
+  <$ token "import" <*> symbol 
 
-def :: Rule Token Decl
+def :: Rule Token (Pos -> Decl)
 def = (\name args rets -> Def args rets name)
   <$  token "def" <*> (symbol <|> op)
   <*> tuple <*> optional (token "->" *> tuple)
   <*> block
 
-let' :: Rule Token Decl
+let' :: Rule Token (Pos -> Decl)
 let' = Let
   <$> (   Left  <$  token "let" <*> expr 
       <|> Right <$> ((,) <$> type' <*> (Just <$> symbol)))
@@ -121,7 +146,7 @@ let' = Let
   <*> optional (token "=" *> expr)
 
 decl :: Rule Token Decl
-decl = rule $ \case
+decl = propagate getPos $ rule $ \case
     Symbol "import" _:_ -> import'
     Symbol "def" _:_    -> def
     _                   -> let'
@@ -159,38 +184,38 @@ block = concat <$ token "{" <*> separated nested term <* token "}"
         Token "{" _:_ -> block
         _             -> pure <$> stmt
 
-if' :: Rule Token Stmt
+if' :: Rule Token (Pos -> Stmt)
 if' = If 
   <$  token "if" <* token "(" <*> expr <* token ")"
   <*> block
   <*> (token "else" *> block <|> pure [])
 
-while :: Rule Token Stmt
+while :: Rule Token (Pos -> Stmt)
 while = While
   <$  token "while" <* token "(" <*> expr <* token ")"
   <*> block
 
-return :: Rule Token Stmt
+return :: Rule Token (Pos -> Stmt)
 return = Return <$ token "return" <*> expr
 
-break :: Rule Token Stmt
+break :: Rule Token (Pos -> Stmt)
 break = Break <$ token "break"
 
-continue :: Rule Token Stmt
+continue :: Rule Token (Pos -> Stmt)
 continue = Continue <$ token "continue"
 
-assign :: Rule Token Stmt
+assign :: Rule Token (Pos -> Stmt)
 assign = Assign <$> expr <* token "=" <*> expr
 
 stmt :: Rule Token Stmt
-stmt = rule $ \case
+stmt = propagate getPos $ rule $ \case
     Symbol "if" _:_       -> if'
     Symbol "while" _:_    -> while
     Symbol "return" _:_   -> return
     Symbol "break" _:_    -> break
     Symbol "continue" _:_ -> continue
     _                     ->
-          try (Decl <$> let' <* look term)
+          try ((\l p -> Decl (l p) p) <$> let' <* look term)
       <|> expr <**> (flip Assign <$ token "=" <*> expr <|> pure Expr)
 
 
