@@ -4,6 +4,7 @@ import Control.Applicative
 import Control.Monad
 import Data.Maybe
 import Data.List
+import Data.Ord
 
 
 -- Rule definition and operations
@@ -15,8 +16,9 @@ newtype Rule t a = Rule
         ) -> [t] -> b   -- rule
     }
 
-rule :: ([t] -> Rule t a) -> Rule t a
+rule, rule1 :: ([t] -> Rule t a) -> Rule t a
 rule x = Rule $ \c ts -> unrule (x ts) c ts
+rule1 x = rule $ \case [] -> reject; _ -> rule x
 
 accept :: a -> [t] -> Rule t a
 accept x ts = Rule $ \(a,_,_) _ -> a x ts
@@ -81,17 +83,18 @@ look x = Rule $ \c ts -> unrule x (new c ts) ts
 try :: Rule t a -> Rule t a
 try x = Rule $ \(a,r,_) ts -> unrule x (a, \_ -> r ts, \_ -> r ts) ts
 
-over :: (t0 -> t1) -> Rule t1 a -> Rule t0 a
-over f x = Rule $ \c ts -> unrule x (new c ts) (map f ts)
+over :: (Traversable f, Applicative f) => Rule t a -> Rule (f t) (f a)
+over x = Rule $ \c ts -> unwrap c ts $ unrule x wrap <$> sequenceA ts
   where
-    new (a,r,e) ts = (\z -> a z . up ts, r . up ts, e . up ts)
+    wrap = (curry Right, Left . Right, Left . Left)
+    unwrap (a,r,e) ts x = case sequenceA x of
+        Right x          -> a (fst <$> x) $ up ts (longest $ snd <$> x)
+        Left (Right ts') -> r             $ up ts ts'
+        Left (Left ts')  -> e             $ up ts ts'
+
+    longest = maximumBy (comparing length)
     up ts ts' = drop (length ts - length ts') ts
-
-propagate :: (t -> a) -> Rule t (a -> b) -> Rule t b
-propagate f x = rule $ \case
-    t:_ -> ($ f t) <$> x
-    _   -> reject
-
+    
 
 -- general rules
 current :: Rule t t
@@ -119,8 +122,15 @@ matchMaybe f = fromJust . f <$> matchIf (isJust . f)
 
 -- Running the actual rules
 run :: Rule t a -> ([t] -> a) -> [t] -> a
-run r fail = unrule r (end, fail, fail)
+run x fail = unrule x (end, fail, fail)
   where
     end a [] = a
     end _ ts = fail ts
+
+debug :: (Show a, Show t) => Rule t a -> [t] -> b
+debug x = unrule x
+  ( \a ts -> error $ "Accept " ++ show a ++ " " ++ show ts
+  , \ts   -> error $ "Reject " ++ show ts
+  , \ts   -> error $ "Fail " ++ show ts
+  )
 

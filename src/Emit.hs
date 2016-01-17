@@ -9,8 +9,8 @@ import Data.Maybe
 import Type
 import Scope
   ( Expr(..)
-  , Stmt(..)
-  , Def(..)
+  , Stmt, Stmt'(..)
+  , Def, Def'(..)
   , Import
   , Module(..)
   )
@@ -74,7 +74,7 @@ expr = \case
       where entries = intercalate ", " $ map expr es
 
 stmt :: Stmt -> [String]
-stmt = \case
+stmt (_,s) = case s of
     Expr e     -> [expr e ++ ";"]
     Assign l r -> [expr l ++ " = " ++ expr r ++ ";"]
     Return e   -> ["return " ++ expr e ++ ";"]
@@ -106,12 +106,12 @@ block ds ss = map (replicate 4 ' ' ++) $ decls ++ stmts
     stmts = concat $ map stmt ss
 
 import' :: Import -> [String]
-import' name = ["#include <" ++ name ++ ".h>"]
+import' (_, name) = ["#include <" ++ name ++ ".h>"]
 
 def :: String -> Def -> [String]
-def "h" (Def (FuncType a r) name _ _) = 
+def "h" (_, Def (FuncType a r) name _ _) = 
     [type' (fromTuple r) ++ " " ++ escape name ++ args a ++ ";"]
-def "c" (Def (FuncType a r) name ds ss) = concat
+def "c" (_, Def (FuncType a r) name ds ss) = concat
     [ [type' (fromTuple r) ++ " " ++ escape name ++ args a ++ " {"]
     , block ds ss
     , ["}", ""]

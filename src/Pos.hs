@@ -1,7 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module File where
+module Pos where
 
+import Control.Arrow
 import Data.List
 
 
@@ -14,7 +15,7 @@ type Col = Int
 
 instance Show Pos where
     show (Pos fp l c) = intercalate ":"
-        [ fp
+        [ if null fp then "-" else fp
         , if l == maxBound then "-" else show (l+1)
         , if c == maxBound then "-" else show (c+1) ]
 
@@ -24,11 +25,9 @@ instance Ord Pos where
         | la == lb  = ca <= cb
         | otherwise = False
 
-class Positional a where
-    getPos :: a -> Pos
-
-instance Positional (a, Pos) where
-    getPos = snd
+instance Monoid Pos where
+    mempty = start ""
+    mappend = const
 
 
 start :: FilePath -> Pos
@@ -41,13 +40,15 @@ nextLine, nextChar :: Pos -> Pos
 nextLine (Pos fp l _) = Pos fp (l+1) 0
 nextChar (Pos fp l c) = Pos fp l (c+1)
 
-
-posString :: FilePath -> String -> [Pos]
-posString fp = scanl (flip next) (start fp)
+posString :: FilePath -> String -> [(Pos, Char)]
+posString fp = uncurry zip <<< scanl (flip next) (start fp) &&& id
   where next = \case '\n' -> nextLine; _ -> nextChar
 
-posLines :: FilePath -> [String] -> [Pos]
-posLines fp = posString fp . unlines
+posLines :: FilePath -> [String] -> [[(Pos, Char)]]
+posLines = zipWith zip . positions
+
+positions :: FilePath -> [[Pos]]
+positions = map (iterate nextChar) . iterate nextLine . start
 
 
 showAt :: Pos -> [String] -> [String]
@@ -56,7 +57,7 @@ showAt p lines = (show p ++ ":") : map (replicate 4 ' ' ++) lines
 errorAt :: Pos -> String -> b
 errorAt p s = error $ unlines $ showAt p [s]
 
-unexpected :: (Positional a) => FilePath -> (a -> String) -> [a] -> b
-unexpected fp _ []   = errorAt (end fp)   $ "unexpected end of input"
-unexpected _ f (a:_) = errorAt (getPos a) $ "unexpected " ++ f a
+unexpected :: Show a => FilePath -> [(Pos, a)] -> b
+unexpected fp []       = errorAt (end fp) $ "unexpected end of input"
+unexpected _ ((p,a):_) = errorAt p        $ "unexpected " ++ show a
 

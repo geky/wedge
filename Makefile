@@ -3,7 +3,8 @@ TARGET = $(BINDIR)/wedge
 HC = ghc
 HI = ghci
 HFLAGS += -W
-HFLAGS += -XLambdaCase -XRankNTypes -XScopedTypeVariables
+HFLAGS += -XLambdaCase -XRankNTypes -XScopedTypeVariables -XTupleSections
+
 
 SRCDIR = src
 TMPDIR = build

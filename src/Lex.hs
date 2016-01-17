@@ -5,60 +5,34 @@ import Control.Applicative
 import Control.Monad
 import Data.Char
 import Rule
-import File
+import Pos
 
 
 -- Token definitions
-data Token
-    = Symbol String Pos
-    | Op String Int Pos
-    | Int Int       Pos
-    | Float Double  Pos
-    | String String Pos
-    | Term          Pos
-    | Token String  Pos
+type Token = (Pos, Token')
+data Token'
+    = Symbol String
+    | Op String Int
+    | Int Int
+    | Float Double
+    | String String
+    | Term
+    | Token String
+    deriving (Show, Eq)
 
-instance Eq Token where
-    Symbol a _ == Symbol b _ = a == b
-    Op a _ _   == Op b _ _   = a == b
-    Int a _    == Int b _    = a == b
-    Float a _  == Float b _  = a == b
-    String a _ == String b _ = a == b
-    Term _     == Term _     = True
-    Token a _  == Token b _  = a == b
-    _          == _          = False
-
-instance Positional Token where
-    getPos (Symbol _ p) = p
-    getPos (Op _ _   p) = p
-    getPos (Int _    p) = p
-    getPos (Float _  p) = p
-    getPos (String _ p) = p
-    getPos (Term     p) = p
-    getPos (Token _  p) = p
-
-instance Show Token where
-    show (Symbol t _) = "symbol " ++ show t
-    show (Op t _ _)   = "op "     ++ show t
-    show (Int t _)    = "int "    ++ show t
-    show (Float t _)  = "float "  ++ show t
-    show (String t _) = "string " ++ show t
-    show (Term _)     = "term"
-    show (Token t _)  = "token "  ++ show t
-
-incPrec :: Token -> Token
-incPrec (Op s l p) = Op s (l+1) p
-incPrec t          = t
+incPrec :: Token' -> Token'
+incPrec (Op s l) = Op s (l+1)
+incPrec t        = t
 
 
 -- Tokenizing rules
-symbol :: Rule Char (Pos -> Token)
+symbol :: Rule Char Token'
 symbol = Symbol <$> many1 (matchIf isAlphaNum)
 
 isOp :: Char -> Bool
 isOp = flip elem "~!@#$%^&*-=+<>?/\\."
 
-op :: Rule Char (Pos -> Token)
+op :: Rule Char Token'
 op = flip Op 0 <$> many1 (matchIf isOp)
 
 digit :: Num n => Int -> Rule Char n
@@ -96,7 +70,7 @@ exp = (^^) <$> e <*> (sign <*> int 10)
         c:cs | elem c "pP" -> accept 2 cs
         _                  -> reject
 
-num :: Rule Char (Pos -> Token)
+num :: Rule Char Token'
 num = do
     sign <- sign
     base <- base
@@ -137,10 +111,10 @@ character q = rule $ \case
     c:cs | c /= q -> accept c cs
     _             -> reject
 
-char :: Rule Char (Pos -> Token)
+char :: Rule Char Token'
 char = Int . ord <$ match '\'' <*> character '\'' <* match '\''
 
-string :: Rule Char (Pos -> Token)
+string :: Rule Char Token'
 string = String <$ match '\"' <*> many (character '\"') <* match '\"'
 
 singleComment :: Rule Char Line
@@ -157,7 +131,7 @@ multiComment = sum <$ matches "/*" <*> many comment <* matches "*/"
         _         -> reject
 
 
-tokenize :: Rule Char (Pos -> Token)
+tokenize :: Rule Char Token'
 tokenize = rule $ \case
     '-':'>':cs          -> accept (Token "->") cs
     '=':cs              -> accept (Token "=") cs
@@ -177,14 +151,11 @@ tokenize = rule $ \case
     c:cs | elem c ";\n" -> accept Term cs
     '/':'/':_           -> singleComment *> tokenize
     '/':'*':_           -> multiComment  *> tokenize
-    c:cs | isSpace c    -> accept (fmap incPrec) cs <*> tokenize
+    c:cs | isSpace c    -> accept incPrec cs <*> tokenize
     _                   -> reject
 
 
 -- Lexing entry point
 lex :: FilePath -> [String] -> [Token]
-lex fp cs 
-  = run (many $ propagate snd $ over fst $ tokenize) err
-  $ zip (unlines cs) (posLines fp cs)
-  where err = unexpected fp $ show . fst
+lex fp = run (many $ over tokenize) (unexpected fp) . posString fp . unlines
 
