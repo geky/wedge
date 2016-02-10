@@ -4,27 +4,37 @@ import System.Environment
 import System.Exit
 import System.FilePath
 import Control.Monad
-import Control.Arrow hiding (first, second)
 import Data.Bifunctor
 import qualified Lex   as L
 import qualified Parse as P
 import qualified Scope as S
 import qualified Emit  as E
-import Stage
 import Result
 import Pos
+import Nested
 
 
 -- Compilation stages
+read :: FilePath -> IO [String]
+read = fmap lines . readFile
+
+write :: (FilePath, [String]) -> IO ()
+write = uncurry writeFile . second unlines
+
+dump :: Show a => String -> FilePath -> a -> IO ()
+dump x fp a = write (fp -<.> x, [show a])
+
 compile :: FilePath -> IO (Result (Positional String) ())
-compile fp = pipe fp () $
-      read
-  >>> stage L.lex   >>> dump "lex"
-  >>> stage P.parse >>> dump "parse"
-  >>> arr   S.scope >>> dump "scope"
-  >>> stage (\fp -> ok . E.emit fp) >>> dump "emit"
-  >>> mapA_ write
-  
+compile fp = unnest $ do
+    source  <- lift1 $ read fp
+    lexed   <- lift2 $ L.lex fp source
+    parsed  <- lift2 $ P.parse fp lexed
+    scoped  <- pure  $ S.scope parsed
+    emitted <- pure  $ E.emit fp scoped
+    lift1 $ dump "lex"   fp lexed
+    lift1 $ dump "parse" fp parsed
+    lift1 $ dump "scope" fp scoped
+    mapM_ (lift1 . write) emitted
     
 
 -- Program entry point
