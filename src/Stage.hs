@@ -4,16 +4,54 @@ import Prelude hiding (read, (.), id, const)
 import System.FilePath
 import Control.Category
 import Control.Arrow
+import Control.Monad
+import Pos
+import Result
 
 
 -- Stage implementation
-type Stage a b = Kleisli IO a b
+newtype Stage a b = Stage
+    { unstage :: FilePath -> a -> IO (Result (Positional String) b)
+    }
 
-stage :: (a -> b) -> Stage a b
-stage f = arr f
+stage :: (FilePath -> a -> Result (Positional String) b) -> Stage a b
+stage x = Stage $ \fp -> pure . x fp
 
-stageIO :: (a -> IO b) -> Stage a b
-stageIO = Kleisli
+stageIO :: (FilePath -> a -> IO (Result (Positional String) b)) -> Stage a b
+stageIO = Stage
+
+instance Category Stage where
+    id = stage $ const ok
+    x . y = stageIO $ \fp a -> unstage y fp a <>>= unstage x fp
+
+instance Arrow Stage where
+    arr = stage . const . (ok .)
+    first x = stageIO $ \fp (a, c) -> liftMM (,c) (unstage x fp a)
+
+instance ArrowChoice Stage where
+    left x = stageIO $ \fp e -> case e of
+        Left a  -> liftMM Left (unstage x fp a)
+        Right a -> returnMM (Right a)
+
+
+-- Nested binds
+liftMM :: (Monad m, Monad n) => (a -> b) -> m (n a) -> m (n b)
+liftMM = liftM . liftM
+
+returnMM :: (Monad m, Monad n) => a -> m (n a)
+returnMM = return . return
+
+infixl 1 <>>=
+(<>>=) :: (Monad m, Monad t, Traversable t) => m (t a) -> (a -> m (t b)) -> m (t b)
+x <>>= y = liftMM y x >>= liftM join . sequence
+
+infixl 1 =<<>
+(=<<>) :: (Monad m, Monad t, Traversable t) => (a -> m (t b)) -> m (t a) -> m (t b)
+y =<<> x = x <>>= y
+
+infixl 1 <>>
+(<>>) :: (Monad m, Monad t, Traversable t) => m (t a) -> m (t b) -> m (t b)
+x <>> y = x <>>= \_ -> y
 
 
 -- More arrow operations
@@ -33,18 +71,17 @@ mapA_ w = mapA w >>> const ()
 
 
 -- IO specific operations
-read :: Stage FilePath (FilePath, [String])
-read = id &&& (stageIO readFile >>^ lines)
+read :: Stage () [String]
+read = stageIO (\fp _ -> liftM ok (readFile fp)) >>^ lines
 
 write :: Stage (FilePath, [String]) ()
-write = second unlines ^>> stageIO (uncurry writeFile)
+write = second unlines ^>> stageIO (\_ -> liftM ok . uncurry writeFile)
 
-dump :: Show a => String -> Stage (FilePath, a) (FilePath, a)
-dump x = pass $ (-<.> x) *** pure.show ^>> write
+dump :: Show a => String -> Stage a a
+dump x = pass $ (stage $ \fp a -> ok (fp -<.> x, [show a])) >>> write
 
 
--- Operations on stages
-pipe :: a -> Stage a b -> IO b
-pipe = flip runKleisli
-
+-- Operation on stages
+pipe :: FilePath -> a -> Stage a b -> IO (Result (Positional String) b)
+pipe fp a x = unstage x fp a
 
