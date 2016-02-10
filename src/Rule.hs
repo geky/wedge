@@ -1,49 +1,52 @@
+
+
 module Rule (many, optional, module Rule) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Maybe
 import Data.List
-import Data.Ord
+import Data.Bifunctor
 
 
 -- Rule definition and operations
-newtype Rule t a = Rule
-    { unrule :: forall b .
-        ( a -> [t] -> b -- accept
-        ,      [t] -> b -- reject
-        ,      [t] -> b -- fail
-        ) -> [t] -> b   -- rule
+newtype Rule s t a = Rule
+    { unrule :: forall b . 
+        ( (s,a) -> [(s,t)] -> b -- accept
+        ,          [(s,t)] -> b -- reject
+        ,          [(s,t)] -> b -- fail
+        ) -> [(s,t)] -> b   -- rule
     }
 
-rule, rule1 :: ([t] -> Rule t a) -> Rule t a
-rule x = Rule $ \c ts -> unrule (x ts) c ts
-rule1 x = rule $ \case [] -> reject; _ -> rule x
+rule :: ([t] -> Rule s t a) -> Rule s t a
+rule x = Rule $ \c ts -> unrule (x $ map snd ts) c ts
 
-accept :: a -> [t] -> Rule t a
-accept x ts = Rule $ \(a,_,_) _ -> a x ts
+accept :: Int -> a -> Rule s t a
+accept n x = Rule $ \(a,_,_) ts -> a (second (const x) $ head ts) (drop n ts)
 
-reject :: Rule t a
-reject = Rule $ \(_,r,_) -> r
+reject :: Rule s t a
+reject = Rule $ \(_,r,_) ts -> r ts
 
 
-instance Functor (Rule t) where
-    fmap f x = Rule $ \(a,r,e) -> unrule x (a.f,r,e)
+instance Functor (Rule s t) where
+    fmap f x = Rule $ \(a,r,e) -> unrule x (a . second f,r,e)
 
-instance Applicative (Rule t) where
-    pure = rule . accept
-    x <*> y = Rule $ \(a,r,e) -> unrule x (\f -> unrule y (a.f,e,e), r, e)
+instance Applicative (Rule s t) where
+    pure = accept 0
+    x <*> y = Rule $ \(a,r,e) -> unrule x 
+        (\(s,f) -> unrule y (a . bimap (const s) f,e,e),r,e)
 
-instance Alternative (Rule t) where
-    empty = reject
-    x <|> y = Rule $ \(a,r,e) -> unrule x (a, unrule y (a,r,e), e)
-
-instance Monad (Rule t) where
+instance Monad (Rule s t) where
     return = pure
     fail _ = empty
-    x >>= y = Rule $ \(a,r,e) -> unrule x (\z -> unrule (y z) (a,e,e), r, e)
+    x >>= y = Rule $ \(a,r,e) -> unrule x
+        (\(s,z) -> unrule (y z) (a . first (const s),e,e),r,e)
 
-instance MonadPlus (Rule t) where
+instance Alternative (Rule s t) where
+    empty = reject
+    x <|> y = Rule $ \(a,r,e) -> unrule x (a,unrule y (a,r,e),e)
+
+instance MonadPlus (Rule s t) where
     mzero = empty
     mplus = (<|>)
 
@@ -76,61 +79,48 @@ prefix1 p r = prefix p (p <*> r)
 
 
 -- rule modifiers
-look :: Rule t a -> Rule t a
+look :: Rule s t a -> Rule s t a
 look x = Rule $ \c ts -> unrule x (new c ts) ts
   where new (a,r,_) ts = (\z _ -> a z ts, \_ -> r ts, \_ -> r ts)
 
-try :: Rule t a -> Rule t a
+try :: Rule s t a -> Rule s t a
 try x = Rule $ \(a,r,_) ts -> unrule x (a, \_ -> r ts, \_ -> r ts) ts
 
-over :: (Traversable f, Applicative f) => Rule t a -> Rule (f t) (f a)
-over x = Rule $ \c ts -> unwrap c ts $ unrule x wrap <$> sequenceA ts
-  where
-    wrap = (curry Right, Left . Right, Left . Left)
-    unwrap (a,r,e) ts x = case sequenceA x of
-        Right x          -> a (fst <$> x) $ up ts (longest $ snd <$> x)
-        Left (Right ts') -> r             $ up ts ts'
-        Left (Left ts')  -> e             $ up ts ts'
+at :: Rule s t a -> Rule s t (s, a)
+at x = Rule $ \(a,r,e) ts -> unrule x (\(s,z) -> a (s,(s,z)), r, e) ts
 
-    longest = maximumBy (comparing length)
-    up ts ts' = drop (length ts - length ts') ts
-    
 
 -- general rules
-current :: Rule t t
+current :: Rule s t t
 current = look matchAny
 
-match :: Eq t => t -> Rule t t
+match :: Eq t => t -> Rule s t t
 match t = matchIf (== t)
 
-matches :: Eq t => [t] -> Rule t [t]
+matches :: Eq t => [t] -> Rule s t [t]
 matches ts = rule $ \case
-    ts' | isPrefixOf ts ts' -> uncurry accept $ splitAt (length ts) ts'
+    ts' | isPrefixOf ts ts' -> accept (length ts) ts
     _                       -> reject
 
-matchIf :: (t -> Bool) -> Rule t t
+matchIf :: (t -> Bool) -> Rule s t t
 matchIf p = rule $ \case
-    t:ts | p t -> accept t ts
-    _          -> reject
+    t:_ | p t -> accept 1 t
+    _         -> reject
 
-matchAny :: Rule t t
+matchAny :: Rule s t t
 matchAny = matchIf $ const True
 
-matchMaybe :: (t -> Maybe a) -> Rule t a
+matchMaybe :: (t -> Maybe a) -> Rule s t a
 matchMaybe f = fromJust . f <$> matchIf (isJust . f)
 
 
 -- Running the actual rules
-run :: Rule t a -> ([t] -> a) -> [t] -> a
-run x fail = unrule x (end, fail, fail)
+run :: Rule s t a -> [(s,t)] -> Either [(s,t)] a
+run x = unrule x (end, Left, Left)
   where
-    end a [] = a
-    end _ ts = fail ts
+    end (_, a) [] = Right a
+    end _ ts      = Left ts
 
-debug :: (Show a, Show t) => Rule t a -> [t] -> b
-debug x = unrule x
-  ( \a ts -> error $ "Accept " ++ show a ++ " " ++ show ts
-  , \ts   -> error $ "Reject " ++ show ts
-  , \ts   -> error $ "Fail " ++ show ts
-  )
+run1 :: Rule s t a -> [t] -> Either [t] a
+run1 x = first (map snd) . run x . zip (repeat undefined)
 

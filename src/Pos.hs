@@ -7,6 +7,8 @@ import Data.List
 
 
 -- Position in a file
+type Positional a = (Pos, a)
+
 data Pos = Pos FilePath Line Col
   deriving Eq
 
@@ -26,8 +28,8 @@ instance Ord Pos where
         | otherwise = False
 
 instance Monoid Pos where
-    mempty = start ""
-    mappend = const
+    mempty = end ""
+    mappend = min
 
 
 start :: FilePath -> Pos
@@ -40,11 +42,11 @@ nextLine, nextChar :: Pos -> Pos
 nextLine (Pos fp l _) = Pos fp (l+1) 0
 nextChar (Pos fp l c) = Pos fp l (c+1)
 
-posString :: FilePath -> String -> [(Pos, Char)]
+posString :: FilePath -> String -> [Positional Char]
 posString fp = uncurry zip <<< scanl (flip next) (start fp) &&& id
   where next = \case '\n' -> nextLine; _ -> nextChar
 
-posLines :: FilePath -> [String] -> [[(Pos, Char)]]
+posLines :: FilePath -> [String] -> [[Positional Char]]
 posLines = zipWith zip . positions
 
 positions :: FilePath -> [[Pos]]
@@ -57,7 +59,13 @@ showAt p lines = (show p ++ ":") : map (replicate 4 ' ' ++) lines
 errorAt :: Pos -> String -> b
 errorAt p s = error $ unlines $ showAt p [s]
 
-unexpected :: Show a => FilePath -> [(Pos, a)] -> b
+unexpected :: Show a => FilePath -> [Positional a] -> b
 unexpected fp []       = errorAt (end fp) $ "unexpected end of input"
 unexpected _ ((p,a):_) = errorAt p        $ "unexpected " ++ show a
+
+expect :: Show a => FilePath -> Either [Positional a] b -> b
+expect fp = \case
+    Left []        -> errorAt (end fp) $ "unexpected end of input"
+    Left ((p,a):_) -> errorAt p        $ "unexpected " ++ show a
+    Right b        -> b
 

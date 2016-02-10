@@ -1,15 +1,18 @@
-module Scope (Expr(..), module Scope) where
+module Scope where
 
 import Data.Maybe
+import Data.Either
+import Data.List
+import Data.Bifunctor
 import Type
-import qualified Parse as P
-import Parse (Expr(..))
+import Expr
 import Pos
+import qualified Parse as P
 
 
 -- Fully verified and scoped module definitions
 -- Decls are removed from Stmts
-type Stmt = (Pos, Stmt')
+type Stmt = Positional Stmt'
 data Stmt'
   = Expr Expr
   | Assign Expr Expr
@@ -20,11 +23,16 @@ data Stmt'
   | Continue
   deriving Show
 
-type Import = (Pos, Import')
-type Import' = String
+type Import = Positional Import'
+data Import' = Import String
+  deriving Show
 
-type Def = (Pos, Def')
-data Def' = Def Type String [(Type, String)] [Stmt]
+type Decl = Positional Decl'
+data Decl' = Decl Type String
+  deriving Show
+
+type Def = Positional Def'
+data Def' = Def Type String [Decl] [Stmt]
   deriving Show
 
 data Module = Module [Import] [Def]
@@ -32,42 +40,66 @@ data Module = Module [Import] [Def]
 
 
 -- scope verification and decl lifting
-block :: [P.Stmt] -> ([(Type, String)], [Stmt])
-block [] = ([], [])
-block ((p,s):ss') = case s of
-    P.Decl (P.Let (Right (y, Just s)) e) ->
-        ((y,s):ds, maybeToList ((\e -> (p, Assign (Var s) e)) <$> e) ++ ss)
-    P.Decl _ -> errorAt p "unresolved let statement"
-        -- TODO figure out which fucking line this is on
-    P.Expr e     -> (ds, (p, Expr e):ss)
-    P.Assign l r -> (ds, (p, Assign l r):ss)
-    P.Return e   -> (ds, (p, Return e):ss)
-    P.Break      -> (ds, (p, Break):ss)
-    P.Continue   -> (ds, (p, Continue):ss)
-    P.If t l r   -> (lds ++ rds ++ ds, (p, If t lss rss):ss)
-      where
-        (lds, lss) = block l
-        (rds, rss) = block r
-    P.While t l  -> (lds ++ ds, (p, While t lss):ss)
-      where
-        (lds, lss) = block l
-  where
-    (ds, ss) = block ss'
+verify, verifyNot :: Pos -> [Decl] -> String -> String
+verify p ds s = case find (\(_, Decl _ s') -> s' == s) ds of
+    Just _ -> s `seq` error (show ds)
+    _      -> errorAt p $ "undefined variable \"" ++ s ++ "\""
 
+verifyNot p ds s = case find (\(_, Decl _ s') -> s' == s) ds of
+    Just _ -> errorAt p $ "undefined variable \"" ++ s ++ "\""
+    _      -> s
+
+expr :: Pos -> [Decl] -> Expr -> Expr
+expr p ds = mapV (verify p ds)
+
+decl :: [Decl] -> P.Stmt -> [Decl]
+decl ds (p,s) = case s of
+    P.Decl (P.Let (Right (y, Just s)) e) -> 
+        verifyNot p ds s `seq` expr p ds <$> e `seq` [(p, Decl y s)]
+    P.Decl _     -> errorAt p "unresolved let statement"
+    P.Expr e     -> expr p ds e `seq` []
+    P.Assign l r -> expr p ds l `seq` expr p ds r `seq` []
+    P.Return e   -> expr p ds e `seq` []
+    P.If e l r   -> expr p ds e `seq` decls ds (l ++ r)
+    P.While e l  -> expr p ds e `seq` decls ds l
+    _            -> []
+
+decls :: [Decl] -> [P.Stmt] -> [Decl]
+decls ds = concat . tail . scanl decl ds
+
+stmt :: [Decl] -> P.Stmt -> Maybe Stmt
+stmt ds (p,s) = (p,) <$> case s of
+    P.Decl d     -> Assign (Var s) <$> e
+      where (P.Let (Right (_, Just s)) e) = d
+    P.Expr e     -> Just $ Expr e
+    P.Assign l r -> Just $ Assign l r
+    P.Return e   -> Just $ Return e
+    P.Break      -> Just $ Break
+    P.Continue   -> Just $ Continue
+    P.If e l r   -> Just $ If e (stmts ds l) (stmts ds r)
+    P.While e l  -> Just $ While e (stmts ds l)
+
+stmts :: [Decl] -> [P.Stmt] -> [Stmt]
+stmts ds = catMaybes . map (stmt ds)
+
+block :: [P.Stmt] -> ([Decl], [Stmt])
+block s = (decls', stmts')
+  where
+    decls' = decls [] s
+    stmts' = stmts decls' s
+
+topdecl :: P.Decl -> Either Import Def
+topdecl (p,d) = bimap (p,) (p,) $ case d of
+    P.Def a (Just r) n ss       -> Right $ Def y n `uncurry` block ss
+        where y = FuncType a r
+    P.Def _ _ _ _               -> errorAt p "unresolved function decl"
+    P.Let (Right (y, Just n)) e -> Right $ Def y' n [] s
+        where
+            y' = FuncType [] (toTuple y)
+            s = maybeToList $ (p,) . Return <$> e
+    P.Let _ _                   -> errorAt p "unresolved decl"
+    P.Import s                  -> Left $ Import s
 
 scope :: P.Tree -> Module
-scope [] = Module [] []
-scope ((p,m):ms) = case m of
-    P.Def a (Just r) s ss       -> Module is ((p,def):ds)
-      where def = uncurry (Def (FuncType a r) s) (block ss)
-    P.Def _ _ _ _               -> errorAt p "unresolved function decl"
-    P.Let (Right (y, Just s)) e -> Module is ((p,def):ds)
-      where
-        def = Def (FuncType [] (toTuple y)) s [] 
-            ((\e -> (p, Return e)) <$> maybeToList e)
-    P.Let _ _                   -> errorAt p "unresolved decl"
-    P.Import s                  -> Module ((p,s):is) ds
-  where
-    Module is ds = scope ms
-
+scope = uncurry Module . partitionEithers . map topdecl
 

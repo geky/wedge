@@ -2,16 +2,16 @@ module Emit where
 
 import Prelude hiding (lex)
 import System.FilePath
-import Control.Arrow
 import Data.Char
 import Data.List
 import Data.Maybe
 import Type
+import Expr
 import Scope
-  ( Expr(..)
-  , Stmt, Stmt'(..)
+  ( Stmt, Stmt'(..)
+  , Import, Import'(..)
+  , Decl, Decl'(..)
   , Def, Def'(..)
-  , Import
   , Module(..)
   )
 
@@ -68,9 +68,9 @@ expr = \case
       where args = intercalate ", " $ map expr es
     Access e s  -> expr e ++ "." ++ s
     Var s       -> escape s
-    IntLit i    -> show i
-    FloatLit f  -> show f
-    ArrayLit es -> "(char[]){" ++ entries ++ "}"
+    Int i       -> show i
+    Float f     -> show f
+    Array es    -> "(char[]){" ++ entries ++ "}"
       where entries = intercalate ", " $ map expr es
 
 stmt :: Stmt -> [String]
@@ -98,15 +98,16 @@ stmt (_,s) = case s of
         , ["}"]
         ]
 
+block :: [Decl] -> [Stmt] -> [String]
 block ds ss = map (replicate 4 ' ' ++) $ decls ++ stmts
   where
     decls = case ds of
         [] -> []
-        ds -> map ((++";") . decl . second Just) ds ++ [""]
+        ds -> map (\(_, Decl y n) -> decl (y, Just n) ++ ";") ds ++ [""]
     stmts = concat $ map stmt ss
 
 import' :: Import -> [String]
-import' (_, name) = ["#include <" ++ name ++ ".h>"]
+import' (_, Import name) = ["#include <" ++ name ++ ".h>"]
 
 def :: String -> Def -> [String]
 def "h" (_, Def (FuncType a r) name _ _) = 
