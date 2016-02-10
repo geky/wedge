@@ -6,6 +6,7 @@ import Control.Monad
 import Data.Char
 import Rule
 import Pos
+import Result
 
 
 -- Token definitions
@@ -156,6 +157,6 @@ tokenize = rule $ \case
 
 
 -- Lexing entry point
-lex :: FilePath -> [String] -> [Token]
+lex :: FilePath -> [String] -> Result (Positional String) [Token]
 lex fp = expect fp . run (many $ at tokenize) . posString fp . unlines
 

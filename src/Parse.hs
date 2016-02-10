@@ -6,6 +6,7 @@ import Data.Char
 import Rule
 import Type
 import Expr
+import Result
 import Pos
 import Lex (Token, Token'(..))
 
@@ -188,6 +189,6 @@ stmt = at $ rule $ \case
 
 
 -- Parsing entry point
-parse :: FilePath -> [Token] -> Tree
+parse :: FilePath -> [Token] -> Result (Positional String) Tree
 parse fp = expect fp . run (separated decl term)
 

@@ -4,6 +4,8 @@ module Pos where
 
 import Control.Arrow
 import Data.List
+import Result hiding (error)
+import qualified Result as R
 
 
 -- Position in a file
@@ -30,6 +32,12 @@ instance Ord Pos where
 instance Monoid Pos where
     mempty = end ""
     mappend = min
+
+instance Show (Positional String) where
+    show (p, s) = unlines [show p ++ ":", replicate 4 ' ' ++ s]
+
+instance Show (Positional [String]) where
+    show (p, ss) = unlines $ (show p ++ ":") : map (replicate 4 ' ' ++) ss
 
 
 start :: FilePath -> Pos
@@ -59,13 +67,10 @@ showAt p lines = (show p ++ ":") : map (replicate 4 ' ' ++) lines
 errorAt :: Pos -> String -> b
 errorAt p s = error $ unlines $ showAt p [s]
 
-unexpected :: Show a => FilePath -> [Positional a] -> b
-unexpected fp []       = errorAt (end fp) $ "unexpected end of input"
-unexpected _ ((p,a):_) = errorAt p        $ "unexpected " ++ show a
+unexpected :: Show a => FilePath -> [Positional a] -> Result (Positional String) b
+unexpected fp []       = R.error (end fp, "unexpected end of input")
+unexpected _ ((p,a):_) = R.error (p     , "unexpected " ++ show a)
 
-expect :: Show a => FilePath -> Either [Positional a] b -> b
-expect fp = \case
-    Left []        -> errorAt (end fp) $ "unexpected end of input"
-    Left ((p,a):_) -> errorAt p        $ "unexpected " ++ show a
-    Right b        -> b
+expect :: Show a => FilePath -> Either [Positional a] b -> Result (Positional String) b
+expect fp = either (unexpected fp) ok
 

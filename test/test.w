@@ -23,7 +23,7 @@ def loop(void) -> void {
 }
 
 def main(void) -> int {
-    int a = 1
+    int a = q
     fix(a)
     printf("Hello World!\n\0")
     return 0
