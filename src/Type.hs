@@ -1,23 +1,30 @@
 module Type where
 
+import Data.Maybe
+
 
 -- Type definitions
-type Tuple = [(Type, Maybe String)]
 data Type
     = Void
     | Type String
-    | ArrayType Type (Maybe Int)
-    | StructType Tuple
-    | FuncType Tuple Tuple
+    | Array Type (Maybe Int)
+    | Struct Struct
+    | Func Struct Struct
     deriving Show
 
-toTuple :: Type -> Tuple
-toTuple (StructType ys) = ys
-toTuple Void            = []
-toTuple y               = [(y, Nothing)]
+type Struct = [(Type, Maybe String)]
 
-fromTuple :: Tuple -> Type
-fromTuple []             = Void
-fromTuple [(y, Nothing)] = y
-fromTuple ys             = StructType ys
+
+toStruct :: Type -> Struct
+toStruct (Struct ys) = ys
+toStruct Void        = []
+toStruct y           = [(y, Nothing)]
+
+fromStruct :: Struct -> Type
+fromStruct []             = Void
+fromStruct [(y, Nothing)] = y
+fromStruct ys             = Struct ys
+
+names :: Struct -> [String]
+names = catMaybes . map snd
 

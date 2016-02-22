@@ -5,15 +5,22 @@ import Control.Monad
 
 
 -- Nested type for wrapping nested monads
-newtype Nested m1 m2 a = Nested { unnest :: m1 (m2 a) }
+newtype Nested m1 m2 a = Nested (m1 (m2 a))
 
 
 -- Lifting single monads
+nest :: m1 (m2 a) -> Nested m1 m2 a
+nest = Nested
+
+unnest :: Nested m1 m2 a -> m1 (m2 a)
+unnest (Nested a) = a
+
 lift1 :: (Functor m1, Applicative m2) => m1 a -> Nested m1 m2 a
 lift1 = Nested . fmap pure
 
 lift2 :: (Applicative m1) => m2 a -> Nested m1 m2 a
 lift2 = Nested . pure
+
 
 -- Instance declarations
 instance (Functor m1, Functor m2) => Functor (Nested m1 m2) where

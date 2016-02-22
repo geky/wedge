@@ -8,10 +8,9 @@ import Data.Maybe
 import Type
 import Expr
 import Scope
-  ( Stmt, Stmt'(..)
-  , Import, Import'(..)
-  , Decl, Decl'(..)
-  , Def, Def'(..)
+  ( Stmt(..)
+  , Block
+  , Decl(..)
   , Module(..)
   )
 
@@ -25,13 +24,13 @@ escape = (concat.) $ map $ \case
 
 
 -- Emitting definitions
-args :: Tuple -> String
+args :: Struct -> String
 args = (\s -> "("++s++")") . \case
     [] -> "void"
-    ys -> intercalate ", " $ map decl ys
+    ys -> intercalate ", " $ map var ys
 
-members :: Tuple -> String
-members = (\s -> "{"++s++"}") . intercalate " " . map ((++";") . decl)
+members :: Struct -> String
+members = (\s -> "{"++s++"}") . intercalate " " . map ((++";") . var)
 
 array :: Type -> Maybe Int -> Maybe String -> String
 array y n name = type' y ++ name' ++ "[" ++ n' ++ "]"
@@ -39,27 +38,27 @@ array y n name = type' y ++ name' ++ "[" ++ n' ++ "]"
     name' = fromMaybe "" ((" "++) <$> name)
     n'    = fromMaybe "" (show <$> n)
 
-func :: Tuple -> Tuple -> Maybe String -> String
-func x y name = type' (fromTuple y) ++ " (*" ++ name' ++ ")" ++ args x
+func :: Struct -> Struct -> Maybe String -> String
+func x y name = type' (fromStruct y) ++ " (*" ++ name' ++ ")" ++ args x
   where name' = fromMaybe "" name
 
 type' :: Type -> String
 type' = \case
-    Void            -> "void"
-    Type "int"      -> "int"
-    Type "uint"     -> "unsigned"
-    Type "float"    -> "double"
-    Type t          -> t
-    StructType ys   -> "struct " ++ members ys
-    y               -> decl (y, Nothing)
+    Void         -> "void"
+    Type "int"   -> "int"
+    Type "uint"  -> "unsigned"
+    Type "float" -> "double"
+    Type t       -> t
+    Struct ys    -> "struct " ++ members ys
+    y            -> var (y, Nothing)
 
-decl :: (Type, Maybe String) -> String
-decl (y, name) = case y of
-    ArrayType y n -> type' y ++ name' ++ "[" ++ n' ++ "]"
+var :: (Type, Maybe Var) -> String
+var (y, name) = case y of
+    Array y n -> type' y ++ name' ++ "[" ++ n' ++ "]"
       where n' = fromMaybe "" (show <$> n)
-    FuncType x y  -> type' (fromTuple y) ++ " (*" ++ name' ++ ")" ++ args x
+    Func x y  -> type' (fromStruct y) ++ " (*" ++ name' ++ ")" ++ args x
       where name' = fromMaybe "" name
-    y             -> type' y ++ name'
+    y         -> type' y ++ name'
   where name' = fromMaybe "" ((" "++) <$> name)
 
 expr :: Expr -> String
@@ -70,54 +69,55 @@ expr = \case
     Var s       -> escape s
     Int i       -> show i
     Float f     -> show f
-    Array es    -> "(char[]){" ++ entries ++ "}"
+    Tuple es    -> "(char[]){" ++ entries ++ "}"
       where entries = intercalate ", " $ map expr es
 
 stmt :: Stmt -> [String]
-stmt (_,s) = case s of
+stmt = \case
     Expr e     -> [expr e ++ ";"]
     Assign l r -> [expr l ++ " = " ++ expr r ++ ";"]
     Return e   -> ["return " ++ expr e ++ ";"]
     Break      -> ["break;"]
     Continue   -> ["continue;"]
-    If t l []  -> concat
+    If t l r -> concat
         [ ["if (" ++ expr t ++ ") {"]
-        , block [] l
-        , ["}"]
-        ]
-    If t l r   -> concat
-        [ ["if (" ++ expr t ++ ") {"]
-        , block [] l
+        , block l
         , ["} else {"]
-        , block [] r
+        , block r
         , ["}"]
         ]
-    While t l  -> concat
+    While t l -> concat
         [ ["while (" ++ expr t ++ ") {"]
-        , block [] l
+        , block l
         , ["}"]
         ]
 
-block :: [Decl] -> [Stmt] -> [String]
-block ds ss = map (replicate 4 ' ' ++) $ decls ++ stmts
+block :: Block -> [String]
+block (ds, ss) = map (replicate 4 ' ' ++) $ vars ++ stmts
   where
-    decls = case ds of
+    vars = case map snd ds of
         [] -> []
-        ds -> map (\(_, Decl y n) -> decl (y, Just n) ++ ";") ds ++ [""]
-    stmts = concat $ map stmt ss
+        ds -> map ((++";") . var . (Type "int",) . Just) ds ++ [""]
+    stmts = concat $ map stmt (map snd ss)
 
-import' :: Import -> [String]
-import' (_, Import name) = ["#include <" ++ name ++ ".h>"]
+import' :: String -> [String]
+import' name = ["#include <" ++ name ++ ".h>"]
 
-def :: String -> Def -> [String]
-def "h" (_, Def (FuncType a r) name _ _) = 
-    [type' (fromTuple r) ++ " " ++ escape name ++ args a ++ ";"]
-def "c" (_, Def (FuncType a r) name ds ss) = concat
-    [ [type' (fromTuple r) ++ " " ++ escape name ++ args a ++ " {"]
-    , block ds ss
+def :: String -> String -> Struct -> Struct -> Block -> [String]
+def "h" n as rs _ = 
+    [type' (fromStruct rs) ++ " " ++ escape n ++ args as ++ ";"]
+def "c" n as rs ss = concat
+    [ [type' (fromStruct rs) ++ " " ++ escape n ++ args as ++ " {"]
+    , block ss
     , ["}", ""]
     ]
-def _ _ = undefined
+def _ _ _ _ _ = undefined
+
+decl :: String -> Decl -> [String]
+decl x = \case
+    Import n       -> if x == "h" then import' n else []
+    Def n as rs ss -> def x n as rs ss
+    _              -> undefined
 
 
 -- Emit for different files
@@ -142,11 +142,10 @@ suffix "c" _ = []
 suffix _ _   = undefined
 
 emitExt :: String -> FilePath -> Module -> [String]
-emitExt ext name (Module is ds) = concat
+emitExt ext name (Module _ ds) = concat
     [ prefix ext name
-    , if ext == "h" then concat $ map import' is else []
     , [""]
-    , concat $ map (def ext) ds
+    , concat $ map (decl ext . snd) ds
     , [""]
     , suffix ext name
     ]

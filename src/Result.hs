@@ -4,8 +4,6 @@ import Prelude hiding (error)
 import qualified Prelude
 import Data.Bifunctor
 import Control.Applicative
---import Control.Exception hiding (try)
---import qualified Control.Exception as Ex
 import System.IO
 import System.Exit
 
@@ -64,7 +62,7 @@ instance Alternative (Result e) where
 
 instance Monad (Result e) where
     return = Ok
-    fail _ = Error []
+    fail m = Error [Prelude.error m]
     a >>= b = case a of
         Ok a         -> b a
         Warning es a -> case b a of
@@ -102,7 +100,4 @@ force = \case
     Ok a        -> a
     Warning _ a -> a
     Error _     -> Prelude.error "Resulted in error"
-
---try :: Exception e => IO a -> IO (Result e a)
---try = fmap result . Ex.try
 

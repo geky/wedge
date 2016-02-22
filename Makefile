@@ -3,7 +3,7 @@ TARGET = $(BINDIR)/wedge
 HC = ghc
 HI = ghci
 HFLAGS += -W
-HFLAGS += -XLambdaCase -XRankNTypes -XScopedTypeVariables -XTupleSections
+HFLAGS += -XLambdaCase -XRankNTypes -XScopedTypeVariables -XTupleSections -XFlexibleInstances
 
 
 SRCDIR = src
@@ -29,6 +29,9 @@ test: $(TARGET)
 
 $(TARGET): $(SRC)
 	$(HC) $(HFLAGS) $(MAIN) -o $@
+
+build/%.o: src/%.hs
+	$(HC) $(HFLAGS) $^
 
 repl: $(SRC)
 	$(HI) $(HFLAGS) $(MAIN)

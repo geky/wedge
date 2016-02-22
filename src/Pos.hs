@@ -1,76 +1,85 @@
-{-# LANGUAGE FlexibleInstances #-}
+module Pos (FilePath, module Pos) where
 
-module Pos where
-
+import Prelude hiding (error)
 import Control.Arrow
-import Data.List
-import Result hiding (error)
+import Rule
 import qualified Result as R
 
 
 -- Position in a file
-type Positional a = (Pos, a)
-
-data Pos = Pos FilePath Line Col
+data Pos = Pos FilePath Line
   deriving Eq
 
 type Line = Int
-type Col = Int
+
 
 instance Show Pos where
-    show (Pos fp l c) = intercalate ":"
-        [ if null fp then "-" else fp
-        , if l == maxBound then "-" else show (l+1)
-        , if c == maxBound then "-" else show (c+1) ]
+    show (Pos "" (-1)) = "somewhere"
+    show (Pos fp (-1)) = fp
+    show (Pos "" l)    = "line " ++ show l
+    show (Pos fp l)    = fp ++ " on line " ++ show l
 
 instance Ord Pos where
-    Pos _ la ca <= Pos _ lb cb
-        | la <  lb  = True
-        | la == lb  = ca <= cb
-        | otherwise = False
+    Pos fp1 l1 <= Pos fp2 l2 = (fp1, l1) <= (fp2, l2)
 
 instance Monoid Pos where
-    mempty = end ""
-    mappend = min
-
-instance Show (Positional String) where
-    show (p, s) = unlines [show p ++ ":", replicate 4 ' ' ++ s]
-
-instance Show (Positional [String]) where
-    show (p, ss) = unlines $ (show p ++ ":") : map (replicate 4 ' ' ++) ss
+    mempty = Pos "" (-1)
+    mappend = const
 
 
-start :: FilePath -> Pos
-start fp = Pos fp 0 0
+-- Positional messages
+data Msg = Msg Pos [String]
+
+msg :: Pos -> String -> Msg
+msg p ls = Msg p [ls]
+
+instance Show Msg where
+    show (Msg p ls) = unlines
+      $ (show p ++ ":")
+      : map (replicate 4 ' ' ++) ls
+
+-- Msg specific results
+type Result = R.Result Msg
+
+
+-- General position things
+begin :: FilePath -> Pos
+begin fp = Pos fp 0
 
 end :: FilePath -> Pos
-end fp = Pos fp maxBound maxBound
+end fp = Pos fp (-1)
 
-nextLine, nextChar :: Pos -> Pos
-nextLine (Pos fp l _) = Pos fp (l+1) 0
-nextChar (Pos fp l c) = Pos fp l (c+1)
+next :: Char -> Pos -> Pos
+next '\n' (Pos fp l) = Pos fp (l+1)
+next _ p             = p
 
-posString :: FilePath -> String -> [Positional Char]
-posString fp = uncurry zip <<< scanl (flip next) (start fp) &&& id
-  where next = \case '\n' -> nextLine; _ -> nextChar
 
-posLines :: FilePath -> [String] -> [[Positional Char]]
+posString :: FilePath -> String -> [(Pos, Char)]
+posString fp = uncurry zip <<< scanl (flip next) (begin fp) &&& id
+
+posLines :: FilePath -> [String] -> [[(Pos, Char)]]
 posLines = zipWith zip . positions
 
 positions :: FilePath -> [[Pos]]
-positions = map (iterate nextChar) . iterate nextLine . start
+positions = map repeat . iterate (next '\n') . begin
 
+pos :: Rule (Pos, t) (a -> (Pos, a))
+pos = (,) . fst <$> current
 
-showAt :: Pos -> [String] -> [String]
-showAt p lines = (show p ++ ":") : map (replicate 4 ' ' ++) lines
+-- Result overloading
+ok :: b -> Result b
+ok = R.ok
 
-errorAt :: Pos -> String -> b
-errorAt p s = error $ unlines $ showAt p [s]
+warning :: Pos -> String -> b -> Result b
+warning p m b = R.warning (msg p m) b
 
-unexpected :: Show a => FilePath -> [Positional a] -> Result (Positional String) b
-unexpected fp []       = R.error (end fp, "unexpected end of input")
-unexpected _ ((p,a):_) = R.error (p     , "unexpected " ++ show a)
+error :: Pos -> String -> Result b
+error p m = R.error (msg p m)
 
-expect :: Show a => FilePath -> Either [Positional a] b -> Result (Positional String) b
+unexpected :: Show a => FilePath -> [(Pos, a)] -> Result b
+unexpected fp []       = error (end fp) ("unexpected end of input")
+unexpected _ ((p,a):_) = error p        ("unexpected " ++ show a)
+
+expect :: Show a => FilePath -> Either [(Pos, a)] b -> Result b
 expect fp = either (unexpected fp) ok
 

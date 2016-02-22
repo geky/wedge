@@ -1,7 +1,5 @@
 import stdio
 
-int test = 1
-
 def fix(int eh) -> void {
     1+2 + 3+4
 }
@@ -23,9 +21,8 @@ def loop(void) -> void {
 }
 
 def main(void) -> int {
-    int a = q
+    let a = 2
     fix(a)
-    printf("Hello World!\n\0")
     return 0
 }
 

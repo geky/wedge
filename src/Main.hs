@@ -9,7 +9,7 @@ import qualified Lex   as L
 import qualified Parse as P
 import qualified Scope as S
 import qualified Emit  as E
-import Result
+import Result hiding (Result)
 import Pos
 import Nested
 
@@ -24,12 +24,12 @@ write = uncurry writeFile . second unlines
 dump :: Show a => String -> FilePath -> a -> IO ()
 dump x fp a = write (fp -<.> x, [show a])
 
-compile :: FilePath -> IO (Result (Positional String) ())
+compile :: FilePath -> IO (Result ())
 compile fp = unnest $ do
     source  <- lift1 $ read fp
     lexed   <- lift2 $ L.lex fp source
     parsed  <- lift2 $ P.parse fp lexed
-    scoped  <- pure  $ S.scope parsed
+    scoped  <- lift2 $ S.scope parsed
     emitted <- pure  $ E.emit fp scoped
     lift1 $ dump "lex"   fp lexed
     lift1 $ dump "parse" fp parsed
@@ -52,5 +52,5 @@ main = do
         exitFailure
 
     result <- compile $ head args
-    check $ first snd result
+    check $ first show result
 

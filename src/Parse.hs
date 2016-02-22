@@ -6,189 +6,189 @@ import Data.Char
 import Rule
 import Type
 import Expr
-import Result
 import Pos
-import Lex (Token, Token'(..))
+import Lex (Token(..))
 
 
 -- Parse tree definitions
-type Stmt = Positional Stmt'
-data Stmt'
-    = Decl Decl'
+data Stmt
+    = Decl Decl
     | Expr Expr
     | Assign Expr Expr
-    | If Expr [Stmt] [Stmt]
-    | While Expr [Stmt]
+    | If Expr Block Block
+    | While Expr Block
     | Return Expr
     | Break
     | Continue
     deriving Show
 
-type Decl = Positional Decl'
-data Decl'
-    = Let (Either Expr (Type, Maybe String)) (Maybe Expr)
-    | Def Tuple (Maybe Tuple) String [Stmt]
+type Block = [(Pos, Stmt)]
+
+data Decl
+    = Def String Struct Struct Block
+    | Let Expr Expr
     | Import String
     deriving Show
 
-type Tree = [Decl]
+type Tree = [(Pos, Decl)]
 
 
 -- General token matching rules
-symbol :: Rule s Token' String
-symbol = rule $ \case
-    Symbol s:_ -> accept 1 s
-    _          -> reject
+symbol :: Rule (Pos, Token) String
+symbol = rule $ (.map snd) $ \case
+    Symbol _ s:_ -> accept 1 s
+    _            -> reject
 
-op :: Rule s Token' String
-op = rule $ \case
-    Op s _:_ -> accept 1 s
+op :: Rule (Pos, Token) String
+op = rule $ (.map snd) $ \case
+    Op _ s:_ -> accept 1 s
     _        -> reject
 
-int :: Rule s Token' Int
-int = rule $ \case
+int :: Rule (Pos, Token) Int
+int = rule $ (.map snd) $ \case
     Int' i:_ -> accept 1 i
     _        -> reject
 
-float :: Rule s Token' Double
-float = rule $ \case
+float :: Rule (Pos, Token) Double
+float = rule $ (.map snd) $ \case
     Float' f:_ -> accept 1 f
     _          -> reject
 
-string :: Rule s Token' String
-string = rule $ \case
+string :: Rule (Pos, Token) String
+string = rule $ (.map snd) $ \case
     String s:_ -> accept 1 s
     _          -> reject
 
-term :: Rule s Token' Token'
-term = rule $ \case
+term :: Rule (Pos, Token) Token
+term = rule $ (.map snd) $ \case
     t@Term:_ -> accept 1 t
     _        -> reject
 
-token :: String -> Rule s Token' Token'
-token s' = rule $ \case
-    t@(Symbol s):_ | s == s' -> accept 1 t
-    t@(Op s _):_   | s == s' -> accept 1 t
-    t@(Token s):_  | s == s' -> accept 1 t
-    _                        -> reject
+token :: String -> Rule (Pos, Token) Token
+token s' = rule $ (.map snd) $ \case
+    t@(Symbol _ s):_ | s == s' -> accept 1 t
+    t@(Op _ s):_     | s == s' -> accept 1 t
+    t@(Token s):_    | s == s' -> accept 1 t
+    _                          -> reject
 
 
 -- Parsing rules
-type' :: Rule Pos Token' Type
-type' = suffix base baseSuffix
+type' :: Rule (Pos, Token) Type
+type' = suffixM typeBase typeSuffix
   where
-    base = rule $ \case
-        Token "(":_     -> fromTuple <$> nested
-        Token "{":_     -> fromTuple <$> struct
-        Symbol "void":_ -> accept 1 $ Void
-        Symbol s:_      -> accept 1 $ Type s
-        _               -> reject
+    typeBase = rule $ (.map snd) $ \case
+        Token "(":_  -> fromStruct <$> struct
+        Symbol _ s:_ -> accept 1 $ Type s
+        _            -> reject
 
-    baseSuffix = flip ArrayType <$ token "[" <*> optional int <* token "]"
-
-    nested = token "(" *> suffix tuple nestSuffix <* token ")"
-    nestSuffix = toFunc <$ token "->" <*> tuple
-      where toFunc rets args = [(FuncType args rets, Nothing)]
-
-struct, tuple :: Rule Pos Token' Tuple
-struct = token "{" *> separated var term <* token "}"
-tuple = rule $ \case
-    Token "(":_ -> token "(" *> tuple <* token ")"
-    _           -> delimited var (token ",")
-
-var :: Rule Pos Token' (Type, Maybe String)
-var = (,) <$> type' <*> optional symbol
-
-import' :: Rule Pos Token' Decl'
-import' = Import
-  <$ token "import" <*> symbol 
-
-def :: Rule Pos Token' Decl'
-def = (\name args rets -> Def args rets name)
-  <$  token "def" <*> (symbol <|> op)
-  <*> tuple <*> optional (token "->" *> tuple)
-  <*> block
-
-let' :: Rule Pos Token' Decl'
-let' = Let
-  <$> (   Left  <$  token "let" <*> expr 
-      <|> Right <$> ((,) <$> type' <*> (Just <$> symbol)))
-      -- TODO fix this in var
-  <*> optional (token "=" *> expr)
-
-decl :: Rule Pos Token' Decl
-decl = at $ rule $ \case
-    Symbol "import":_ -> import'
-    Symbol "def":_    -> def
-    _                 -> let'
-
-expr :: Rule Pos Token' Expr
-expr = subExpr maxBound
-
-subExpr :: Int -> Rule Pos Token' Expr
-subExpr rec = suffix preExpr postExpr
-  where
-    preExpr = rule $ \case
-        Token "(":_ -> token "(" *> expr <* token ")"
-        Op s rec':_ -> Call (Var s) . pure <$ op <*> subExpr rec'
-        Symbol s:_  -> accept 1 $ Var s
-        Int' i:_    -> accept 1 $ Int i
-        Float' f:_  -> accept 1 $ Float f
-        String s:_  -> accept 1 $ Array $ map (Int . ord) s
+    typeSuffix t = rule $ (.map snd) $ \case
+        Token "[":_ -> Array t <$ token "[" <*> optional int <* token "]"
         _           -> reject
 
-    postExpr = rule $ \case
-        Token "(":_ -> flip Call
+entry :: Rule (Pos, Token) (Type, Maybe String)
+entry = (,) <$> type' <*> optional symbol
+
+struct :: Rule (Pos, Token) Struct
+struct = rule $ (.map snd) $ \case
+    Token "(":_ -> token "(" *> struct <* token ")"
+    _           -> delimited entry (token ",")
+
+import' :: Rule (Pos, Token) Decl
+import' = Import
+  <$  token "import"
+  <*> symbol 
+
+def :: Rule (Pos, Token) Decl
+def = Def
+  <$  token "def"
+  <*> (symbol <|> op)
+  <*> struct <* token "->" <*> struct
+  <*> block
+
+let' :: Rule (Pos, Token) Decl
+let' = Let
+  <$  token "let"
+  <*> expr <* token "=" <*> expr
+
+decl :: Rule (Pos, Token) Decl
+decl = rule $ (.map snd) $ \case
+    Symbol _ "import":_ -> import'
+    Symbol _ "def":_    -> def
+    _                   -> let'
+
+expr :: Rule (Pos, Token) Expr
+expr = subExpr maxBound
+
+subExpr :: Int -> Rule (Pos, Token) Expr
+subExpr prec = suffixM preExpr postExpr
+  where
+    preExpr = rule $ (.map snd) $ \case
+        Token "(":_   -> token "(" *> expr <* token ")"
+        Op prec' s:_  -> Call (Var s) . pure <$ op <*> subExpr prec'
+        Symbol _ s:_  -> accept 1 $ Var s
+        Int' i:_      -> accept 1 $ Int i
+        Float' f:_    -> accept 1 $ Float f
+        String s:_    -> accept 1 $ Tuple (map (Int . ord) s)
+        _             -> reject
+
+    postExpr x = rule $ (.map snd) $ \case
+        Token "(":_ -> Call x
           <$ token "(" <*> delimited expr (token ",") <* token ")"
-        Token ".":_ -> flip Access
+        Token ".":_ -> Access x
           <$ token "." <*> symbol
-        Op s rec':_ | rec > rec' -> (\b a -> Call (Var s) [a,b])
-          <$ op <*> subExpr rec'
+        Op prec' s:_ | prec > prec' -> (\y -> Call (Var s) [x,y])
+          <$ op <*> subExpr prec'
         _ -> reject
 
-block :: Rule Pos Token' [Stmt]
-block = concat <$ token "{" <*> separated nested term <* token "}"
+block :: Rule (Pos, Token) Block
+block = token "{" *> (concat <$> separated nested term) <* token "}"
   where
-    nested = rule $ \case
+    nested = rule $ (.map snd) $ \case
         Token "{":_ -> block
-        _           -> pure <$> stmt
+        _           -> pure <$> (pos <*> stmt)
 
-if' :: Rule Pos Token' Stmt'
+if' :: Rule (Pos, Token) Stmt
 if' = If
   <$  token "if" <* token "(" <*> expr <* token ")"
   <*> block
   <*> (token "else" *> block <|> pure [])
 
-while :: Rule Pos Token' Stmt'
+while :: Rule (Pos, Token) Stmt
 while = While
   <$  token "while" <* token "(" <*> expr <* token ")"
   <*> block
 
-return :: Rule Pos Token' Stmt'
+return :: Rule (Pos, Token) Stmt
 return = Return <$ token "return" <*> expr
 
-break :: Rule Pos Token' Stmt'
+break :: Rule (Pos, Token) Stmt
 break = Break <$ token "break"
 
-continue :: Rule Pos Token' Stmt'
+continue :: Rule (Pos, Token) Stmt
 continue = Continue <$ token "continue"
 
-assign :: Rule Pos Token' Stmt'
+assign :: Rule (Pos, Token) Stmt
 assign = Assign <$> expr <* token "=" <*> expr
 
-stmt :: Rule Pos Token' Stmt
-stmt = at $ rule $ \case
-    Symbol "if":_       -> if'
-    Symbol "while":_    -> while
-    Symbol "return":_   -> return
-    Symbol "break":_    -> break
-    Symbol "continue":_ -> continue
-    _                   ->
-          try (Decl <$> let' <* look term)
-      <|> expr <**> (flip Assign <$ token "=" <*> expr <|> pure Expr)
+stmt :: Rule (Pos, Token) Stmt
+stmt = rule $ (.map snd) $ \case
+    Symbol _ "if":_       -> if'
+    Symbol _ "while":_    -> while
+    Symbol _ "return":_   -> return
+    Symbol _ "break":_    -> break
+    Symbol _ "continue":_ -> continue
+    Symbol _ "let":_      -> Decl <$> let'
+    _                     -> do
+        e <- expr
+        rule $ (.map snd) $ \case
+            Token "=":_ -> Assign e <$ token "=" <*> expr
+            _           -> Expr <$> pure e
+
+tree :: Rule (Pos, Token) Tree
+tree = separated (pos <*> decl) term
 
 
 -- Parsing entry point
-parse :: FilePath -> [Token] -> Result (Positional String) Tree
-parse fp = expect fp . run (separated decl term)
+parse :: FilePath -> [(Pos, Token)] -> Result Tree
+parse fp = expect fp . run tree
 
