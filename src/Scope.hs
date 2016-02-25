@@ -76,19 +76,21 @@ declV vs p = \case
     P.Import _    -> ok []
     P.Def f _ _ _ -> ok [(p,f)]
     P.Let l _     -> let' vs p l
+    P.Extern l    -> let' vs p l
 
-decl :: Vars -> Pos -> P.Decl -> Result Decl
+decl :: Vars -> Pos -> P.Decl -> Result [Decl]
 decl vs p = \case
-    P.Import s       -> ok $ Import s
-    P.Def f as rs ss -> Def f as rs <$> block vs' ss
+    P.Import s       -> pure <$> (ok $ Import s)
+    P.Def f as rs ss -> pure <$> (Def f as rs <$> block vs' ss)
       where vs' = zip (repeat p) (names as) ++ vs
-    P.Let l r        -> Let l <$> expr vs p r
+    P.Let l r        -> pure <$> (Let l <$> expr vs p r)
+    P.Extern _       -> ok []
 
 module' :: P.Tree -> Result Module
 module' tree = do
     vs <- foldlM (\vs (p,d) -> (++vs) <$> declV vs p d) [] tree
-    ds <- mapM (\(p,d) -> (p,) <$> decl vs p d) tree
-    return $ Module vs ds
+    ds <- mapM (\(p,d) -> map (p,) <$> decl vs p d) tree
+    return $ Module vs (concat ds)
 
 
 -- Scoping entry point

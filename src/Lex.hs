@@ -158,14 +158,14 @@ tokenize = rule $ (.snd.unzip) $ \case
     ']':_              -> token "]"
     ',':_              -> token ","
     '.':_              -> token "."
+    '/':'/':_          -> singleComment *> tokenize
+    '/':'*':_          -> multiComment  *> tokenize
     c:_ | isAlpha c    -> symbol
     c:_ | isOp c       -> op
     c:_ | isDigit c    -> num
     '\'':_             -> char
     '\"':_             -> string
     c:_ | elem c ";\n" -> overM $ accept 1 Term
-    '/':'/':_          -> singleComment *> tokenize
-    '/':'*':_          -> multiComment  *> tokenize
     c:_ | isSpace c    -> accept 1 (second incPrec) <*> tokenize
     _                  -> reject
 

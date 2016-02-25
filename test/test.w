@@ -23,6 +23,9 @@ def loop(void) -> void {
 def main(void) -> int {
     let a = 2
     fix(a)
+    printf("hi\n\0")
     return 0
 }
+
+extern printf
 

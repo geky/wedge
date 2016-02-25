@@ -11,7 +11,7 @@ ASM := $(CSRC:.c=.s)
 
 CFLAGS += -O2
 CFLAGS += -std=c99
-CFLAGS += -include stdio.h
+#CFLAGS += -include stdio.h
 CFLAGS += -Wall -Winline
 
 

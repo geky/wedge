@@ -27,6 +27,7 @@ type Block = [(Pos, Stmt)]
 data Decl
     = Def String Struct Struct Block
     | Let Expr Expr
+    | Extern Expr
     | Import String
     deriving Show
 
@@ -110,11 +111,18 @@ let' = Let
   <$  token "let"
   <*> expr <* token "=" <*> expr
 
+extern :: Rule (Pos, Token) Decl
+extern = Extern
+  <$  token "extern"
+  <*> expr
+
 decl :: Rule (Pos, Token) Decl
 decl = rule $ (.map snd) $ \case
     Symbol _ "import":_ -> import'
     Symbol _ "def":_    -> def
-    _                   -> let'
+    Symbol _ "let":_    -> let'
+    Symbol _ "extern":_ -> extern
+    _                   -> reject
 
 expr :: Rule (Pos, Token) Expr
 expr = subExpr maxBound
