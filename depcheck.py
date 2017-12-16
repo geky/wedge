@@ -61,7 +61,7 @@ def depdecl(self, d):
 def depcheck(scope):
     targets = Deps()
     for name, d in scope:
-        if hasattr(d, 'export') and d.export:
+        if isinstance(d, Fun) and d.scope.isexported(d.sym):
             depdecl(d, targets)
             targets.append(name, scope)
 

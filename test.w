@@ -1,6 +1,9 @@
 
 
 extern putchar = int -> int
+def hi = int -> int
+fun hi(i)
+    return i
 
 export main
 def main = int -> int
@@ -12,8 +15,5 @@ fun main(a2)
     putchar(b)
     putchar(c)
     putchar(10)
-    return 0
+    return hi(0)
 
-def hi = void -> int
-fun hi()
-    return 0

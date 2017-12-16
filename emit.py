@@ -33,25 +33,24 @@ def emitexpr(self, e):
     if isinstance(self, Call):
         aid = emitexpr(self.exprs[0], e)
         id = e.getlid()
-        e.locals.append(['%s = call i32 %s(i32 %s)' % (id, emitsym(self.sym), aid)])
+        e.locals.append([
+            '%s = call i32 %s(i32 %s)' % (id, emitsym(self.sym), aid)])
         return id
     elif isinstance(self, Num):
         return '%d' % self.v
     elif isinstance(self, Sym):
-        if self.local:
-            return '%%%s' % self.v
-        else:
-            return '@%s' % self.v
+        id = e.getlid()
+        e.locals.append([
+            '%s = load i32, i32* %s, align 4' % (id, emitsym(self))])
+        return id
     else:
         raise NotImplementedError("emitexpr not implemented for %r" % self)
 
 def emitstmt(self, e):
     if isinstance(self, Let):
-        lid = e.getlid()
         e.locals.append([
-            '%s = alloca i32, align 4' % lid,
-            'store i32 %s, i32* %s, align 4' % (emitexpr(self.expr, e), lid),
-            '%s = load i32, i32* %s, align 4' % (emitsym(self.sym), lid)])
+            '%s = alloca i32, align 4' % emitsym(self.sym),
+            'store i32 %s, i32* %s, align 4' % (emitexpr(self.expr, e), emitsym(self.sym))])
     elif isinstance(self, Def):
         pass
     elif isinstance(self, Return):
@@ -64,7 +63,10 @@ def emitdecl(self, e):
     if isinstance(self, Fun):
         args = []
         for arg in self.args:
-            args.append('i32 %s' % emitsym(arg))
+            args.append('i32 %s-a' % emitsym(arg))
+            e.locals.append([
+                '%s = alloca i32, align 4' % emitsym(arg),
+                'store i32 %s-a, i32* %s, align 4' % (emitsym(arg), emitsym(arg))])
 
         for s in self.stmts:
             emitstmt(s, e)

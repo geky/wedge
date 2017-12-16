@@ -28,7 +28,6 @@ class Fun:
         self.sym = sym
         self.args = args
         self.stmts = stmts
-        self.export = True # TODO ...
 
     def __repr__(self):
         return 'Fun(%r, %r, %r)' % (self.sym, self.args, self.stmts)

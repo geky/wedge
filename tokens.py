@@ -48,5 +48,11 @@ class Sym:
     def __hash__(self):
         return hash(self.v)
 
-    def lookup(self):
-        return self.scope[self]
+    def getval(self):
+        return self.scope.getval(self)
+
+    def gettype(self):
+        return self.scope.gettype(self)
+
+    def getsym(self):
+        return self.scope.getsym(self)

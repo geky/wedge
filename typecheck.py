@@ -22,18 +22,16 @@ def typeexpr(self):
         for expr, expected in zip(self.exprs, ftype.args):
             type = typeexpr(expr)
             if type != expected:
-                raise TypeException("argument does not match type %s != %s" %
-                    (type, expected))
+                raise TypeException(
+                    "argument does not match type %s != %s" % (type, expected))
 
         return self.type
     elif isinstance(self, Num):
         self.type = IntT()
         return self.type
     elif isinstance(self, Sym):
-        v = self.lookup()
-        typeassert(v)
-        self.type = v.type
-        return v.type
+        self.type = self.gettype()
+        return self.type
     else:
         raise NotImplementedError("typeexpr not implemented for %r" % self)
 
@@ -45,14 +43,21 @@ def typestmt(self):
 
         self.type = typeexpr(self.expr)
         if expected and self.type != expected:
-            raise TypeException("mismatched type %s != %s" % (self.type, expected))
+            raise TypeException(
+                "mismatched type %s != %s" % (self.type, expected))
 
         return self.type
     elif isinstance(self, Def):
         typeassert(self)
         return self.type
     elif isinstance(self, Return):
+        expected = self.scope.gettype(Sym('!return'))
+
         self.type = typeexpr(self.exprs[0])
+        if expected and self.type != expected:
+            raise TypeException(
+                "mismatched type %s != %s" % (self.type, expected))
+
         return self.type
     else:
         typeexpr(self)
@@ -62,9 +67,10 @@ def typedecl(self):
         if self.sym in self.scope and isinstance(self.scope[self.sym], Def):
             self.type = self.scope[self.sym].type
         typeassert(self)
-
         if not isinstance(self.type, FunT):
             raise TypeException("Not a function type %s" % self.type)
+
+        self.ret.type = self.type.rets[0]
 
         if len(self.args) != len(self.type.args):
             raise TypeException("mismatched function arguments %s and %s" %
@@ -78,6 +84,9 @@ def typedecl(self):
         return self.type
     elif isinstance(self, Extern):
         typeassert(self)
+        return self.type
+    elif isinstance(self, Export):
+        self.type = None
         return self.type
     elif isinstance(self, Def):
         typeassert(self)

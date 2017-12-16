@@ -11,7 +11,7 @@ class Scope:
         self.name = name
         self.value = value
 
-    def __getitem__(self, name):
+    def getval(self, name):
         while self:
             if name == self.name:
                 return self.value
@@ -20,9 +20,41 @@ class Scope:
         else:
             raise KeyError(name)
 
+    def gettype(self, name):
+        while self:
+            if name == self.name:
+                return self.value.type
+            else:
+                self = self.tail
+        else:
+            raise KeyError(name)
+
+    def getsym(self, name):
+        while self:
+            if name == self.name:
+                return self.name
+            else:
+                self = self.tail
+        else:
+            raise KeyError(name)
+
+    def isexported(self, name):
+        while self:
+            if name == self.name and isinstance(self.value, Fun):
+                return False
+            elif name == self.name and isinstance(self.value, Export):
+                return True
+            else:
+                self = self.tail
+        else:
+            return False
+
+    def __getitem__(self, name):
+        return self.getval(name)
+
     def __contains__(self, name):
         try:
-            self[name]
+            self.getval(name)
         except KeyError:
             return False
         else:
@@ -68,7 +100,7 @@ def scopeexpr(self, s):
             raise ScopeException("Symbol not in scope %s" % self)
 
         self.scope = s
-        self.local = s[self].sym.local
+        self.local = s.getsym(self).local
     else:
         raise NotImplementedError("scopeexpr not implemented for %r" % self)
 
@@ -81,6 +113,7 @@ def scopestmt(self, s):
         scopetype(self.type, s)
         return s.bind(self.sym, self)
     elif isinstance(self, Return):
+        self.scope = s
         scopeexpr(self.exprs[0], s)
         return s
     else:
@@ -91,10 +124,11 @@ def scopedecl(self, s):
         self.scope = s
         self.sym.local = False
         s = s.bind(self.sym, self)
-        ns = s
+
+        self.ret = Sym('!return')
+        ns = s.bind(self.ret, self.ret)
 
         for arg in self.args:
-            arg.sym = arg # hmm
             ns = ns.bind(arg, arg)
 
         for stmt in self.stmts:
@@ -105,7 +139,8 @@ def scopedecl(self, s):
         self.sym.local = False
         return s.bind(self.sym, self)
     elif isinstance(self, Export):
-        return s
+        self.sym.local = False
+        return s.bind(self.sym, self)
     elif isinstance(self, Def):
         scopetype(self.type, s)
         self.sym.local = False
