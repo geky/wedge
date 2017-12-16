@@ -129,6 +129,8 @@ def parse(tokens):
     p = rules.Matcher(match)
     ptree = []
     while next_():
+        while p.accept(';'):
+            pass
         ptree.append(p.expect(parsedecl))
         if next_():
             p.expect(';')

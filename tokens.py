@@ -1,4 +1,5 @@
 
+
 # Literal numbers and strings
 class Num:
     def __init__(self, v):
@@ -33,6 +34,7 @@ class Sym:
     def __init__(self, v):
         assert isinstance(v, str)
         self.v = v
+        self.local = False
 
     def __repr__(self):
         return 'Sym(%r)' % self.v
@@ -43,5 +45,6 @@ class Sym:
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def emit(self):
-        return '@%s' % self.v
+    def __hash__(self):
+        return hash(self.v)
+

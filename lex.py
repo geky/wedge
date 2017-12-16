@@ -21,6 +21,7 @@ KEYWORDS = {
     "int",
     "void",
     "extern",
+    "export"
 }
 
 
@@ -50,7 +51,7 @@ def lexnl(p):
 
     if len(ws) > p.indents[-1]:
         p.indents.append(len(ws))
-        return ['{', ';']
+        return '{'
     elif len(ws) < p.indents[-1]:
         p.indents.pop()
         return [';', '}']

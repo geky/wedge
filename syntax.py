@@ -10,20 +10,16 @@ class Def:
     def __repr__(self):
         return 'Def(%r, %r)' % (self.sym, self.type)
 
-    def emit(self):
-        return
-
 class Let:
     def __init__(self, sym=None, expr=None):
         assert isinstance(sym, Sym)
         self.sym = sym
         self.expr = expr
 
+        self.sym.local = True
+
     def __repr__(self):
         return 'Let(%r, %r)' % (self.sym, self.expr)
-
-    def emit(self):
-        return
 
 class Fun:
     def __init__(self, sym=None, args=[], stmts=[]):
@@ -32,14 +28,10 @@ class Fun:
         self.sym = sym
         self.args = args
         self.stmts = stmts
+        self.export = True # TODO ...
 
     def __repr__(self):
         return 'Fun(%r, %r, %r)' % (self.sym, self.args, self.stmts)
-
-    def emit(self):
-        return [
-            'define i32 %s() {' % self.sym.emit(),
-                [s.emit() for s in self.stmts], '}', '']
 
 class Export:
     def __init__(self, sym=None):
@@ -50,7 +42,7 @@ class Export:
         return 'Export(%r)' % self.sym
 
 class Extern:
-    def __init__(self, sym=None):
+    def __init__(self, sym=None, type=None):
         assert isinstance(sym, Sym)
         self.sym = sym
 
@@ -64,9 +56,6 @@ class Return:
 
     def __repr__(self):
         return 'Return(%r)' % self.exprs
-
-    def emit(self):
-        return 'ret i32 0'
 
 class Assign:
     def __init__(self, lh=[], rh=[]):
@@ -84,3 +73,4 @@ class Call:
 
     def __repr__(self):
         return 'Call(%r, %r)' % (self.sym, self.exprs)
+

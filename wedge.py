@@ -2,6 +2,8 @@
 
 from lex import lex
 from parse import parse
+from scope import scope
+from deps import deps
 from emit import emit
 from llvm import llvm
 
@@ -24,8 +26,10 @@ def main(name, input, level='emit'):
     with open('%s.p' % name, 'w') as f:
         f.write(prettify(ptree))
 
-    # Compile into LLVM IR
-    code = emit(ptree)
+    # Find dependencies, and compile into LLVM IR
+    scope_ = scope(ptree)
+    targets = deps(scope_)
+    code = emit(targets)
 
     with open('%s.ll' % name, 'w') as f:
         f.write(code)
