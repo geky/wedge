@@ -1,4 +1,8 @@
 from syntax import *
+from type import *
+
+class ScopeException(Exception):
+    pass
 
 class Scope:
     def __init__(self, name=None, value=None, tail=None):
@@ -24,16 +28,30 @@ class Scope:
         else:
             return True
 
+    def __bool__(self):
+        return not (self.name is None and self.tail is None)
+
     def __iter__(self):
+        all = []
         while self:
-            yield self.name, self.value
+            all.append((self.name, self.value))
             self = self.tail
+        return reversed(all)
 
     def __repr__(self):
         return 'Scope([%s])' % ', '.join(map(repr, self))
 
     def bind(self, name, value):
+        assert isinstance(name, Sym)
         return Scope(name, value, self)
+
+def scopetype(self, s):
+    if isinstance(self, IntT):
+        pass
+    elif isinstance(self, FunT):
+        pass
+    else:
+        raise NotImplementedError("scopetype not implemented for %r" % self)
 
 def scopeexpr(self, s):
     if isinstance(self, Call):
@@ -46,15 +64,21 @@ def scopeexpr(self, s):
     elif isinstance(self, Str):
         pass
     elif isinstance(self, Sym):
+        if self not in s:
+            raise ScopeException("Symbol not in scope %s" % self)
+
         self.scope = s
-        if self not in self.scope:
-            assert False, "Note in scope!"
+        self.local = s[self].sym.local
     else:
         raise NotImplementedError("scopeexpr not implemented for %r" % self)
 
 def scopestmt(self, s):
     if isinstance(self, Let):
+        self.scope = s
         scopeexpr(self.expr, s)
+        return s.bind(self.sym, self)
+    if isinstance(self, Def):
+        scopetype(self.type, s)
         return s.bind(self.sym, self)
     elif isinstance(self, Return):
         scopeexpr(self.exprs[0], s)
@@ -65,21 +89,31 @@ def scopestmt(self, s):
 def scopedecl(self, s):
     if isinstance(self, Fun):
         self.scope = s
+        self.sym.local = False
         s = s.bind(self.sym, self)
-
         ns = s
-        for st in self.stmts:
-            ns = scopestmt(st, ns)
+
+        for arg in self.args:
+            arg.sym = arg # hmm
+            ns = ns.bind(arg, arg)
+
+        for stmt in self.stmts:
+            ns = scopestmt(stmt, ns)
 
         return s
     elif isinstance(self, Extern):
+        self.sym.local = False
         return s.bind(self.sym, self)
     elif isinstance(self, Export):
         return s
+    elif isinstance(self, Def):
+        scopetype(self.type, s)
+        self.sym.local = False
+        return s.bind(self.sym, self)
     else:
-        raise NotImplementedError("scopestmt not implemented for %r" % self)
+        raise NotImplementedError("scopedecl not implemented for %r" % self)
 
-def scope(ptree):
+def scopecheck(ptree):
     s = Scope()
 
     for d in ptree:

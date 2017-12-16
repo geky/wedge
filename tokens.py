@@ -34,7 +34,7 @@ class Sym:
     def __init__(self, v):
         assert isinstance(v, str)
         self.v = v
-        self.local = False
+        self.local = True
 
     def __repr__(self):
         return 'Sym(%r)' % self.v
@@ -48,3 +48,5 @@ class Sym:
     def __hash__(self):
         return hash(self.v)
 
+    def lookup(self):
+        return self.scope[self]

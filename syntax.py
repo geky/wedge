@@ -45,6 +45,7 @@ class Extern:
     def __init__(self, sym=None, type=None):
         assert isinstance(sym, Sym)
         self.sym = sym
+        self.type = type
 
     def __repr__(self):
         return 'Extern(%r)' % self.sym

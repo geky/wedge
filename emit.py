@@ -23,9 +23,14 @@ def emitsym(self):
     else:
         return '@%s' % self.v
 
+def emittype(self):
+    if isinstance(self, IntT):
+        return "i32"
+    else:
+        raise NotImplementedError("emittype not implemented for %r" % self)
+
 def emitexpr(self, e):
     if isinstance(self, Call):
-        self.exprs[0].local = True # TODO HACK! should be in scope?
         aid = emitexpr(self.exprs[0], e)
         id = e.getlid()
         e.locals.append(['%s = call i32 %s(i32 %s)' % (id, emitsym(self.sym), aid)])
@@ -47,6 +52,8 @@ def emitstmt(self, e):
             '%s = alloca i32, align 4' % lid,
             'store i32 %s, i32* %s, align 4' % (emitexpr(self.expr, e), lid),
             '%s = load i32, i32* %s, align 4' % (emitsym(self.sym), lid)])
+    elif isinstance(self, Def):
+        pass
     elif isinstance(self, Return):
         v = emitexpr(self.exprs[0], e)
         e.locals.append(['ret i32 %s' % v])
@@ -55,6 +62,10 @@ def emitstmt(self, e):
 
 def emitdecl(self, e):
     if isinstance(self, Fun):
+        args = []
+        for arg in self.args:
+            args.append('i32 %s' % emitsym(arg))
+
         for s in self.stmts:
             emitstmt(s, e)
 
@@ -62,7 +73,7 @@ def emitdecl(self, e):
         e.locals = []
 
         e.globals.append([
-            'define i32 %s() {' % emitsym(self.sym),
+            'define i32 %s(%s) {' % (emitsym(self.sym), ', '.join(args)),
             ] + locals + [
             '    ret i32 0',
             '}'

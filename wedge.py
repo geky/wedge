@@ -2,14 +2,21 @@
 
 from lex import lex
 from parse import parse
-from scope import scope
-from deps import deps
+from scopecheck import scopecheck
+from typecheck import typecheck
+from depcheck import depcheck
 from emit import emit
 from llvm import llvm
 
 
 def prettify(things):
-    return '\n'.join(['[']+['    '+repr(t) for t in things]+[']'])
+    return '\n'.join(['[']+['    %r' % (t,) for t in things]+[']'])
+
+def prettifyscope(things):
+    return '\n'.join(['[']+['    %s: %r' % (n.v, t) for n, t in things]+[']'])
+
+def prettifytypes(things):
+    return '\n'.join(['[']+['    %s: %r' % (n.v, t.type) for n, t in things]+[']'])
 
 def main(name, input, level='emit'):
     # Lexical analysis
@@ -27,10 +34,19 @@ def main(name, input, level='emit'):
         f.write(prettify(ptree))
 
     # Find dependencies, and compile into LLVM IR
-    scope_ = scope(ptree)
-    targets = deps(scope_)
-    code = emit(targets)
+    scope = scopecheck(ptree)
+    with open('%s.s.p' % name, 'w') as f:
+        f.write(prettifyscope(scope))
+    
+    scope = typecheck(scope)
+    with open('%s.t.p' % name, 'w') as f:
+        f.write(prettifytypes(scope))
 
+    deps = depcheck(scope)
+    with open('%s.d.p' % name, 'w') as f:
+        f.write(prettify(deps))
+
+    code = emit(deps)
     with open('%s.ll' % name, 'w') as f:
         f.write(code)
 
