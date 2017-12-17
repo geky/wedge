@@ -1,13 +1,19 @@
 
 
 class Unexpected(Exception):
-    def __init__(self, matcher, token, rule):
+    def __init__(self, matcher, token, rule, line):
         self.matcher = matcher
         self.token = token
         self.rule = rule
+        self.line = line
 
     def __str__(self):
-        return "unexpected %r looking for %r" % (self.token, self.rule)
+        if self.line:
+            return ("unexpected %r looking for %r line %d" %
+                (self.token, self.rule, self.line))
+        else:
+            return ("unexpected %r looking for %r" %
+                (self.token, self.rule))
 
 class Matcher:
     def __init__(self, matcher):
@@ -20,6 +26,12 @@ class Matcher:
             self.match = rule(self)
         else:
             self.match = self.matcher(self, rule)
+
+        try:
+            self.match.line = self.line
+        except AttributeError:
+            pass
+
         self.failures = []
         return self.match
 
@@ -34,12 +46,15 @@ class Matcher:
             self.failures.append(e)
             return False
 
-    def unexpected(self, token=None, rule=None):
+    def unexpected(self, token=None, rule=None, line=None):
         if not token and self.failures:
-            return Unexpected(self, self.failures[0].token,
-                [e.rule for e in self.failures])
-        else:
-            return Unexpected(self, token, rule)
+            token = self.failures[0].token
+            rule = [e.rule for e in self.failures]
+
+        if not line and hasattr(self, 'line'):
+            line = self.line
+
+        return Unexpected(self, token, rule, line)
 
 
 def choice(rules):

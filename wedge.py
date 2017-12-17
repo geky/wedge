@@ -12,6 +12,9 @@ import llvm
 def prettify(things):
     return '\n'.join(['[']+['    %r' % (t,) for t in things]+[']'])
 
+def prettifytokens(things):
+    return '\n'.join(['[']+['    %r' % (t,) for t, _ in things]+[']'])
+
 def prettifyscope(things):
     return '\n'.join(['[']+['    %s: %r' % (n.v, t) for n, t in things]+[']'])
 
@@ -24,7 +27,7 @@ def main(name, input, level='emit'):
 
     tokens = list(tokens)
     with open('%s.l' % name, 'w') as f:
-        f.write(prettify(tokens))
+        f.write(prettifytokens(tokens))
 
     # Parse out the language structure
     ptree = parse(tokens)

@@ -6,13 +6,13 @@ class TypeException(Exception):
 
 def typeassert(v):
     if not hasattr(v, 'type') or not v.type:
-        raise TypeException("No type for %s" % v)
+        raise TypeException("No type for %s line %d" % v)
 
 def typeexprn(self):
     if isinstance(self, Call):
         ftype = typeexpr(self.sym)
         if not isinstance(ftype, FunT):
-            raise TypeException("Trying to call non-function %s" % ftype)
+            raise TypeException("Trying to call non-function %s line %d" % (ftype, self.line))
 
         self.types = ftype.rets
 
@@ -23,7 +23,7 @@ def typeexprn(self):
             type = typeexpr(expr)
             if type != expected:
                 raise TypeException(
-                    "argument does not match type %s != %s" % (type, expected))
+                    "argument does not match type %s != %s line %d" % (type, expected, self.line))
 
         return self.types
     elif isinstance(self, Num):
@@ -52,7 +52,7 @@ def typestmt(self):
     if isinstance(self, Let):
         self.types = typeexprs(self.exprs)
         if len(self.types) != len(self.syms):
-            raise TypeException("mismatched let %s and %s" % (self.syms, self.exprs))
+            raise TypeException("mismatched let %s and %s line %d" % (self.syms, self.exprs, self.line))
             
         for sym, type in zip(self.syms, self.types):
             if sym in self.scope and isinstance(self.scope[sym], Def):
@@ -73,7 +73,7 @@ def typestmt(self):
         self.types = typeexprs(self.exprs)
 
         if len(self.types) != len(rets):
-            raise TypeException("mismatched return %s and %s" % (self.types, rets))
+            raise TypeException("mismatched return %s and %s line %d" % (self.types, rets, self.line))
 
         for type, expected in zip(self.types, rets):
             if expected and type != expected:
@@ -90,11 +90,11 @@ def typedecl(self):
             self.type = self.scope[self.sym].type
         typeassert(self)
         if not isinstance(self.type, FunT):
-            raise TypeException("Not a function type %s" % self.type)
+            raise TypeException("Not a function type %s line %d" % (self.type, self.line))
 
         if len(self.args) != len(self.type.args):
-            raise TypeException("mismatched function arguments %s and %s" %
-                (self.args, self.type.args))
+            raise TypeException("mismatched function arguments %s and %s line %d" %
+                (self.args, self.type.args, self.line))
         for arg, type in zip(self.args, self.type.args):
             arg.type = type
 

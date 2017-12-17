@@ -37,7 +37,7 @@ def lexnum(p):
     return Num(int(num))
 
 def lexstr(p):
-    _, str = p.expect('\"([^"]*)\"')
+    str = p.expect('\"([^"]*)\"')
     return Str(str)
 
 def lexws(p):
@@ -45,6 +45,7 @@ def lexws(p):
 
 def lexnl(p):
     ws, = p.expect('\n([ \t\v\f\r]*)')
+    p.line += 1
 
     if not hasattr(p, 'indents'):
         p.indents = [0]
@@ -58,6 +59,9 @@ def lexnl(p):
     else:
         return ';'
 
+def lexcomment(p):
+    p.expect('//[^\n]*')
+
 def lex(string):
     def match(p, rule):
         nonlocal string
@@ -70,9 +74,13 @@ def lex(string):
 
     p = rules.Matcher(match)
     p.indent = [0]
+    p.line = 1
 
     while string:
+        line = p.line
+
         p.expect(rules.choice([
+            lexcomment,
             lexsym,
             lexnum,
             lexstr,
@@ -93,7 +101,7 @@ def lex(string):
         if p.match:
             if isinstance(p.match, list):
                 for m in p.match:
-                    yield m
+                    yield (m, line)
             else:
-                yield p.match
+                yield (p.match, line)
 

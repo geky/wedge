@@ -109,7 +109,7 @@ def scopeexpr(self, s):
         pass
     elif isinstance(self, Sym):
         if self not in s:
-            raise ScopeException("Symbol not in scope %s" % self)
+            raise ScopeException("Symbol not in scope %s line %d" % (self, self.line))
 
         self.scope = s
         self.local = s.getsym(self).local

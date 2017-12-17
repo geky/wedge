@@ -121,13 +121,19 @@ def parse(tokens):
         if not next_():
             raise p.unexpected([], rule)
 
-        if rule != lookahead[0] and (
+        if rule != lookahead[0][0] and (
                 not isinstance(rule, type) or
-                not isinstance(lookahead[0], rule)):
-            raise p.unexpected(lookahead[0], rule)
+                not isinstance(lookahead[0][0], rule)):
+            raise p.unexpected(lookahead[0][0], rule, lookahead[0][1])
 
         m, lookahead = lookahead[0], lookahead[1:]
-        return m
+
+        p.line = m[1] # assign line number
+        try:
+            m[0].line = p.line
+        except AttributeError:
+            pass
+        return m[0]
 
     p = rules.Matcher(match)
     ptree = []
