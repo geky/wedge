@@ -11,15 +11,12 @@ class Def:
         return 'Def(%r, %r)' % (self.sym, self.type)
 
 class Let:
-    def __init__(self, sym=None, expr=None):
-        assert isinstance(sym, Sym)
-        self.sym = sym
-        self.expr = expr
-
-        self.sym.local = True
+    def __init__(self, syms=None, exprs=None):
+        self.syms = syms
+        self.exprs = exprs
 
     def __repr__(self):
-        return 'Let(%r, %r)' % (self.sym, self.expr)
+        return 'Let(%r, %r)' % (self.syms, self.exprs)
 
 class Fun:
     def __init__(self, sym=None, args=[], stmts=[]):
@@ -58,12 +55,19 @@ class Return:
         return 'Return(%r)' % self.exprs
 
 class Assign:
-    def __init__(self, lh=[], rh=[]):
-        self.lh = lh
-        self.rh = rh
+    def __init__(self, syms=None, exprs=None):
+        self.syms = syms
+        self.exprs = exprs
 
     def __repr__(self):
-        return 'Assign(%r, %r)' % (self.lh, self.rh)
+        return 'Assign(%r, %r)' % (self.syms, self.exprs)
+
+class Expr:
+    def __init__(self, exprs=[]):
+        self.exprs = exprs
+
+    def __repr__(self):
+        return 'Expr(%r)' % self.exprs
 
 # Expressions
 class Call:

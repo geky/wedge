@@ -1,19 +1,22 @@
 
 
 extern putchar = int -> int
-def hi = int -> int
+
+def hi1 = int -> int, int, int
+fun hi1(i)
+    return 72, 105, 33
+
+def hi = int -> int, int, int
 fun hi(i)
-    return i
+    return hi1(i)
 
 export main
-def main = int -> int
-fun main(a2)
-    let a = 72
-    let b = 105
-    let c = 33
-    putchar(a2)
+def main = void -> int
+fun main()
+    let a, b, c = hi(0)
+    putchar(a)
     putchar(b)
     putchar(c)
     putchar(10)
-    return hi(0)
+    return 0
 

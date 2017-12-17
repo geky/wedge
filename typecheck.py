@@ -8,13 +8,13 @@ def typeassert(v):
     if not hasattr(v, 'type') or not v.type:
         raise TypeException("No type for %s" % v)
 
-def typeexpr(self):
+def typeexprn(self):
     if isinstance(self, Call):
         ftype = typeexpr(self.sym)
         if not isinstance(ftype, FunT):
             raise TypeException("Trying to call non-function %s" % ftype)
 
-        self.type = ftype.rets[0]
+        self.types = ftype.rets
 
         if len(self.exprs) != len(ftype.args):
             raise TypeException("mismatched call %s and %s" %
@@ -25,42 +25,64 @@ def typeexpr(self):
                 raise TypeException(
                     "argument does not match type %s != %s" % (type, expected))
 
-        return self.type
+        return self.types
     elif isinstance(self, Num):
         self.type = IntT()
-        return self.type
+        return [self.type]
     elif isinstance(self, Sym):
         self.type = self.gettype()
-        return self.type
+        return [self.type]
     else:
         raise NotImplementedError("typeexpr not implemented for %r" % self)
 
+def typeexpr(self):
+    # TODO, should there be discard work?
+    types = typeexprn(self)
+    return types[0]
+
+def typeexprs(self):
+    if len(self) == 0:
+        return []
+    if len(self) == 1:
+        return typeexprn(self[0])
+    else:
+        return [typeexpr(expr) for expr in self]
+
 def typestmt(self):
     if isinstance(self, Let):
-        expected = None
-        if self.sym in self.scope and isinstance(self.scope[self.sym], Def):
-            expected = self.scope[self.sym].type
+        self.types = typeexprs(self.exprs)
+        if len(self.types) != len(self.syms):
+            raise TypeException("mismatched let %s and %s" % (self.syms, self.exprs))
+            
+        for sym, type in zip(self.syms, self.types):
+            if sym in self.scope and isinstance(self.scope[sym], Def):
+                expected = self.scope[sym].type
+            else:
+                expected = None
 
-        self.type = typeexpr(self.expr)
-        if expected and self.type != expected:
-            raise TypeException(
-                "mismatched type %s != %s" % (self.type, expected))
+            if expected and type != expected:
+                raise TypeException(
+                    "mismatched type %s != %s" % (type, expected))
 
-        return self.type
+            sym.type = type
     elif isinstance(self, Def):
         typeassert(self)
-        return self.type
+        self.sym.type = type
     elif isinstance(self, Return):
-        expected = self.scope.gettype(Sym('!return'))
+        rets = self.scope.getfun().type.rets
+        self.types = typeexprs(self.exprs)
 
-        self.type = typeexpr(self.exprs[0])
-        if expected and self.type != expected:
-            raise TypeException(
-                "mismatched type %s != %s" % (self.type, expected))
+        if len(self.types) != len(rets):
+            raise TypeException("mismatched return %s and %s" % (self.types, rets))
 
-        return self.type
+        for type, expected in zip(self.types, rets):
+            if expected and type != expected:
+                raise TypeException(
+                    "mismatched type %s != %s" % (type, expected))
+    elif isinstance(self, Expr):
+        typeexprs(self.exprs)
     else:
-        typeexpr(self)
+        raise NotImplementedError("typestmt not implemented for %r" % self)
 
 def typedecl(self):
     if isinstance(self, Fun):
@@ -69,8 +91,6 @@ def typedecl(self):
         typeassert(self)
         if not isinstance(self.type, FunT):
             raise TypeException("Not a function type %s" % self.type)
-
-        self.ret.type = self.type.rets[0]
 
         if len(self.args) != len(self.type.args):
             raise TypeException("mismatched function arguments %s and %s" %
@@ -81,16 +101,16 @@ def typedecl(self):
         for stmt in self.stmts:
             typestmt(stmt)
 
-        return self.type
+        self.sym.type = self.type
     elif isinstance(self, Extern):
         typeassert(self)
-        return self.type
+        self.sym.type = self.type
     elif isinstance(self, Export):
         self.type = None
-        return self.type
+        self.sym.type = self.type
     elif isinstance(self, Def):
         typeassert(self)
-        return self.type
+        self.sym.type = self.type
     else:
         raise NotImplementedError("typedecl not implemented for %r" % self)
 

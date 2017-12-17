@@ -17,6 +17,7 @@ class Deps:
 
         self.syms.add(sym)
         self.targets.append((sym, v))
+        depdecl(v, self)
 
     def __contains__(self, sym):
         return sym in self.syms
@@ -41,20 +42,29 @@ def depexpr(self, d):
     else:
         raise NotImplementedError("depexpr not implemented for %r" % self)
 
+def depexprs(self, d):
+    for expr in self:
+        depexpr(expr, d)
+
 def depstmt(self, d):
     if isinstance(self, Let):
-        depexpr(self.expr, d)
+        for expr in self.exprs:
+            depexpr(expr, d)
     elif isinstance(self, Def):
         pass
     elif isinstance(self, Return):
-        depexpr(self.exprs[0], d)
+        depexprs(self.exprs, d)
+    elif isinstance(self, Expr):
+        depexprs(self.exprs, d)
     else:
-        depexpr(self, d)
+        raise NotImplementedError("depstmt not implemented for %r" % self)
 
 def depdecl(self, d):
     if isinstance(self, Fun):
         for s in self.stmts:
             depstmt(s, d)
+    elif isinstance(self, Extern):
+        pass
     else:
         raise NotImplementedError("depdecl not implemented for %r" % self)
 
@@ -62,7 +72,7 @@ def depcheck(scope):
     targets = Deps()
     for name, d in scope:
         if isinstance(d, Fun) and d.scope.isexported(d.sym):
-            depdecl(d, targets)
             targets.append(name, scope)
+            depdecl(d, targets)
 
     return [v for _, v in targets]

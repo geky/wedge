@@ -6,7 +6,7 @@ from scopecheck import scopecheck
 from typecheck import typecheck
 from depcheck import depcheck
 from emit import emit
-from llvm import llvm
+import llvm
 
 
 def prettify(things):
@@ -51,10 +51,15 @@ def main(name, input, level='emit'):
         f.write(code)
 
     # LLVM compile time
-    asm = llvm(code)
+    code = llvm.optimize(code)
+    with open('%s.O3.ll' % name, 'w') as f:
+        f.write(code)
 
+    code = llvm.compile(code)
     with open('%s.s' % name, 'w') as f:
-        f.write(asm)
+        f.write(code)
+
+    llvm.link(code, '%s.out' % name)
 
 if __name__ == "__main__":
     import sys

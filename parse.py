@@ -5,21 +5,31 @@ from type import *
 import rules
 import lex
 
-
-def parsetype(p):
+def parsesingletype(p):
     if p.accept('int'):
-        type = IntT()
-    elif p.accept('void'):
-        type = None
+        return IntT()
     else:
         raise p.unexpected()
 
+def parsetypes(p):
+    if p.accept('void'):
+        types = []
+    else:
+        types = [parsesingletype(p)]
+
     while True:
-        if p.accept('->'):
-            rh = p.expect(parsetype)
-            type = FunT([type] if type else [], [rh] if rh else [])
+        if p.accept(','):
+            types.append(parsesingletype(p))
+        elif p.accept('->'):
+            rh = p.expect(parsetypes)
+            types = [FunT(types, rh)]
         else:
-            return type
+            return types
+
+def parsetype(p):
+    ts = parsetypes(p)
+    assert len(ts) == 1 # TODO
+    return ts[0]
 
 def parseexpr(p):
     if p.accept(Sym):
@@ -43,25 +53,18 @@ def parsestmt(p):
     elif p.accept('return'):
         return Return(p.expect(rules.sepby(parseexpr, ',')))
     elif p.accept('let'):
-        name = p.expect(Sym)
+        names = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
-        value = p.expect(parseexpr)
-        return Let(name, value)
+        values = p.expect(rules.sepby(parseexpr, ','))
+        return Let(names, values)
     elif p.accept('def'):
         name = p.expect(Sym)
         p.expect('=')
         value = p.expect(parsetype)
         return Def(name, value)
-    elif p.accept(parseexpr):
-        value = p.match
-        if isinstance(value, Sym) and p.accept('='):
-            name = value.name
-            value = p.expect(parseexpr)
-            return Assign(name, value)
-        else:
-            return value
     else:
-        p.unexpected()
+        exprs = p.expect(rules.sepby(parseexpr, ','))
+        return Expr(exprs) if len(exprs) > 0 else None
 
 def parsedecl(p):
     if p.accept('fun'):

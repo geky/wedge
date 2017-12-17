@@ -23,7 +23,7 @@ class Scope:
     def gettype(self, name):
         while self:
             if name == self.name:
-                return self.value.type
+                return self.name.type
             else:
                 self = self.tail
         else:
@@ -73,9 +73,21 @@ class Scope:
     def __repr__(self):
         return 'Scope([%s])' % ', '.join(map(repr, self))
 
-    def bind(self, name, value):
+    def bind(self, name, value=None):
         assert isinstance(name, Sym)
+        if not value:
+            value = name
         return Scope(name, value, self)
+
+    # TODO maybe not this
+    def getfun(self):
+        while self:
+            if hasattr(self, 'fun'):
+                return self.fun
+            else:
+                self = self.tail
+        else:
+            assert False
 
 def scopetype(self, s):
     if isinstance(self, IntT):
@@ -104,20 +116,29 @@ def scopeexpr(self, s):
     else:
         raise NotImplementedError("scopeexpr not implemented for %r" % self)
 
+def scopeexprs(selfs, s):
+    for self in selfs:
+        scopeexpr(self, s)
+
 def scopestmt(self, s):
     if isinstance(self, Let):
         self.scope = s
-        scopeexpr(self.expr, s)
-        return s.bind(self.sym, self)
+        scopeexprs(self.exprs, s)
+        for sym in self.syms:
+            s = s.bind(sym)
+        return s
     if isinstance(self, Def):
         scopetype(self.type, s)
         return s.bind(self.sym, self)
     elif isinstance(self, Return):
         self.scope = s
-        scopeexpr(self.exprs[0], s)
+        scopeexprs(self.exprs, s)
+        return s
+    elif isinstance(self, Expr):
+        scopeexprs(self.exprs, s)
         return s
     else:
-        return scopeexpr(self, s)
+        raise NotImplementedError("scopestmt not implemented for %r" % self)
 
 def scopedecl(self, s):
     if isinstance(self, Fun):
@@ -125,8 +146,8 @@ def scopedecl(self, s):
         self.sym.local = False
         s = s.bind(self.sym, self)
 
-        self.ret = Sym('!return')
-        ns = s.bind(self.ret, self.ret)
+        ns = s
+        ns.fun = self
 
         for arg in self.args:
             ns = ns.bind(arg, arg)
