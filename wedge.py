@@ -7,19 +7,23 @@ from typecheck import typecheck
 from depcheck import depcheck
 from emit import emit
 import llvm
+from itertools import groupby
 
 
 def prettify(things):
-    return '\n'.join(['[']+['    %r' % (t,) for t in things]+[']'])
+    return '\n'.join(['[']+['    %r,' % (t,) for t in things]+[']'])
 
 def prettifytokens(things):
-    return '\n'.join(['[']+['    %r' % (t,) for t, _ in things]+[']'])
+    return '\n'.join(['[']+['    %s,' % ', '.join(['%r' % t for t, _ in g]) for _, g in groupby(things, key=lambda v: v[1])]+[']'])
 
 def prettifyscope(things):
-    return '\n'.join(['[']+['    %s: %r' % (n.v, t) for n, t in things]+[']'])
+    return '\n'.join(['[']+['    %s: %r,' % (s, s.__dict__) for s in things]+[']'])
 
 def prettifytypes(things):
-    return '\n'.join(['[']+['    %s: %r' % (n.v, t.type) for n, t in things]+[']'])
+    return '\n'.join(['[']+['    %s: %r,' % (s, s.type) for s in things if hasattr(s, 'type')]+[']'])
+
+def prettifydeps(things):
+    return '\n'.join(['[']+['    %s: %r,' % (s, s.decl) for s in things if hasattr(s, 'decl')]+[']'])
 
 def main(name, input, level='emit'):
     # Lexical analysis
@@ -47,7 +51,7 @@ def main(name, input, level='emit'):
 
     deps = depcheck(scope)
     with open('%s.d.p' % name, 'w') as f:
-        f.write(prettify(deps))
+        f.write(prettifydeps(deps))
 
     code = emit(deps)
     with open('%s.ll' % name, 'w') as f:

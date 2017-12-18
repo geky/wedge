@@ -26,3 +26,26 @@ class FunT:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+class StructT:
+    def __init__(self, syms, types):
+        self.syms = syms
+        self.types = types
+
+    def __repr__(self):
+        return 'StructT(%r, %r)' % (self.syms, self.types)
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, StructT) and
+            self.types == other.types)
+
+class TypeT:
+    def __repr__(self):
+        return 'TypeT'
+
+    def __eq__(self, other):
+        return isinstance(other, TypeT)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)

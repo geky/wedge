@@ -1,23 +1,22 @@
 from syntax import *
+from type import *
 
 class Deps:
     def __init__(self):
         self.syms = set()
         self.targets = []
 
-    def append(self, sym, scope=None):
+    def append(self, sym):
         assert isinstance(sym, Sym)
-        assert scope or hasattr(sym, 'scope')
-
-        scope = scope or sym.scope
-        v = scope[sym]
+        assert hasattr(sym, 'type')
+        assert hasattr(sym, 'impl')
 
         if sym in self.syms:
             return
 
         self.syms.add(sym)
-        self.targets.append((sym, v))
-        depdecl(v, self)
+        self.targets.append(sym)
+        depdecl(sym.impl, self)
 
     def __contains__(self, sym):
         return sym in self.syms
@@ -65,14 +64,16 @@ def depdecl(self, d):
             depstmt(s, d)
     elif isinstance(self, Extern):
         pass
+    elif isinstance(self, Type):
+        for s in self.stmts:
+            depstmt(s, d)
     else:
         raise NotImplementedError("depdecl not implemented for %r" % self)
 
 def depcheck(scope):
     targets = Deps()
-    for name, d in scope:
-        if isinstance(d, Fun) and d.scope.isexported(d.sym):
-            targets.append(name, scope)
-            depdecl(d, targets)
+    for sym in scope:
+        if hasattr(sym, 'impl') and hasattr(sym, 'export'):
+            targets.append(sym)
 
-    return [v for _, v in targets]
+    return targets

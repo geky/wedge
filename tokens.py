@@ -31,28 +31,27 @@ class Str:
 
 # General symbols (not keywords!)
 class Sym:
-    def __init__(self, v):
-        assert isinstance(v, str)
-        self.v = v
-        self.local = True
+    def __init__(self, name):
+        assert isinstance(name, str)
+        self.name = name
 
     def __repr__(self):
-        return 'Sym(%r)' % self.v
+        return 'Sym(%r)' % self.name
 
     def __eq__(self, other):
-        return isinstance(other, Sym) and self.v == other.v
+        return isinstance(other, Sym) and self.name == other.name
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __hash__(self):
-        return hash(self.v)
+        return hash(self.name)
 
-    def getval(self):
-        return self.scope.getval(self)
-
-    def gettype(self):
-        return self.scope.gettype(self)
-
-    def getsym(self):
-        return self.scope.getsym(self)
+    def __getattr__(self, attr):
+        if attr != 'scope':
+            if hasattr(self, 'scope'):
+                try:
+                    return self.scope[self, attr]
+                except KeyError:
+                    pass
+        raise AttributeError("%r has no attribute %r" % (self, attr))

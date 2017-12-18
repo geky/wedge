@@ -29,6 +29,15 @@ class Fun:
     def __repr__(self):
         return 'Fun(%r, %r, %r)' % (self.sym, self.args, self.stmts)
 
+class Type:
+    def __init__(self, sym=None, stmts=[]):
+        assert isinstance(sym, Sym)
+        self.sym = sym
+        self.stmts = stmts
+
+    def __repr__(self):
+        return 'Type(%r, %r)' % (self.sym, self.stmts)
+
 class Export:
     def __init__(self, sym=None):
         assert isinstance(sym, Sym)

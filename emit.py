@@ -19,10 +19,10 @@ class Emitter:
         return '%%l%d' % lid
 
 def emitsym(self):
-    if self.local:
-        return '%%%s' % self.v
+    if getattr(self, 'local', True):
+        return '%%%s' % self.name
     else:
-        return '@%s' % self.v
+        return '@%s' % self.name
 
 def emittype(self):
     if isinstance(self, IntT):
@@ -40,14 +40,15 @@ def emitexpr(self, e):
 
         if len(self.types) > 1:
             rid = e.getlid() + '-r'
+            rtype = '{%s}' % ', '.join('i32' for _ in self.types)
             e.allocs.append([
-                '%s = alloca [%d x i32], align 4' % (rid, len(self.types))])
-            args.append('[%d x i32]* %s' % (len(self.types), rid))
+                '%s = alloca %s, align 4' % (rid, rtype)])
+            args.append('%s* %s' % (rtype, rid))
 
         id = e.getlid()
         e.locals.append([
             '%s = call i32 %s(%s)' % (id, callee, ', '.join(args))])
-        return rid if len(self.sym.gettype().rets) > 1 else id
+        return rid if len(self.types) > 1 else id
     elif isinstance(self, Num):
         return '%d' % self.v
     elif isinstance(self, Sym):
@@ -61,12 +62,13 @@ def emitexpr(self, e):
 def emitexprs(self, e):
     if len(self) == 1 and isinstance(self[0], Call) and len(self[0].types) > 1:
         rid = emitexpr(self[0], e)
+        rtype = '{%s}' % ', '.join('i32' for _ in self[0].types)
         ids = []
         for i, _ in enumerate(self[0].types):
             lid1, lid2 = e.getlid(), e.getlid()
             e.locals.append([
-                '%s = getelementptr inbounds [%d x i32], [%d x i32]* %s, i32 0, i32 %d' % (
-                    lid1, len(self[0].types), len(self[0].types), rid, i),
+                '%s = getelementptr inbounds %s, %s* %s, i32 0, i32 %d' % (
+                    lid1, rtype, rtype, rid, i),
                 '%s = load i32, i32* %s, align 4' % (
                     lid2, lid1)])
             ids.append(lid2)
@@ -92,11 +94,12 @@ def emitstmt(self, e):
         elif len(rets) == 1:
             e.locals.append(['ret i32 %s' % rets[0]])
         else:
+            rtype = '{%s}' % ', '.join('i32' for _ in rets)
             for i, ret in enumerate(rets):
                 lid = e.getlid()
                 e.locals.append([
-                    '%s = getelementptr inbounds [%d x i32], [%d x i32]* %%-r, i32 0, i32 %d' % (
-                        lid, len(rets), len(rets), i),
+                    '%s = getelementptr inbounds %s, %s* %%-r, i32 0, i32 %d' % (
+                        lid, rtype, rtype, i),
                     'store i32 %s, i32* %s, align 4' % (
                         ret, lid)])
     elif isinstance(self, Expr):
@@ -114,8 +117,9 @@ def emitdecl(self, e):
             e.locals.append([
                 'store i32 %s-a, i32* %s, align 4' % (emitsym(arg), emitsym(arg))])
 
-        if len(self.type.rets) > 1:
-            args.append('[%d x i32]* %%-r' % len(self.type.rets))
+        if len(self.sym.type.rets) > 1:
+            rtype = '{%s}' % ', '.join('i32' for _ in self.sym.type.rets)
+            args.append('%s* %%-r' % rtype)
 
         for s in self.stmts:
             emitstmt(s, e)
@@ -143,8 +147,9 @@ def emitdecl(self, e):
 def emit(ptree):
     e = Emitter()
 
-    for d in ptree:
-        emitdecl(d, e)
+    for sym in ptree:
+        if hasattr(sym, 'impl'):
+            emitdecl(sym.impl, e)
 
     assert len(e.locals) == 0
 

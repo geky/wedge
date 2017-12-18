@@ -8,6 +8,8 @@ import lex
 def parsesingletype(p):
     if p.accept('int'):
         return IntT()
+    elif p.accept(Sym):
+        return p.match
     else:
         raise p.unexpected()
 
@@ -45,9 +47,9 @@ def parseexpr(p):
     else:
         raise p.unexpected()
 
-def parsestmt(p):
+def parsefnstmt(p):
     if p.accept('{'):
-        s = parsestmt(p)
+        s = parsefnstmt(p)
         p.expect('}')
         return s
     elif p.accept('return'):
@@ -66,6 +68,19 @@ def parsestmt(p):
         exprs = p.expect(rules.sepby(parseexpr, ','))
         return Expr(exprs) if len(exprs) > 0 else None
 
+def parsetypestmt(p):
+    if p.accept('{'):
+        s = parsetypestmt(p)
+        p.expect('}')
+        return s
+    elif p.accept('def'):
+        name = p.expect(Sym)
+        p.expect('=')
+        value = p.expect(parsetype)
+        return Def(name, value)
+    else:
+        return None
+
 def parsedecl(p):
     if p.accept('fun'):
         name = p.expect(Sym)
@@ -75,11 +90,20 @@ def parsedecl(p):
         p.expect(')')
 
         p.expect('{')
-        stmts = p.expect(rules.sepby(parsestmt, ';'))
+        stmts = p.expect(rules.sepby(parsefnstmt, ';'))
         stmts = [s for s in stmts if s]
         p.expect('}')
 
         return Fun(name, args, stmts)
+    elif p.accept('type'):
+        name = p.expect(Sym)
+
+        p.expect('{')
+        stmts = p.expect(rules.sepby(parsetypestmt, ';'))
+        stmts = [s for s in stmts if s]
+        p.expect('}')
+
+        return Type(name, stmts)
     elif p.accept('let'):
         name = p.expect(Sym)
         p.expect('=')
