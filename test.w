@@ -7,19 +7,21 @@ type hello
     def b = int
     def c = int
 
-def hi = hello, hello -> int, int, int
-fun hi(i, h)
-    hello(0, 1, 2)
+def int_copy = int -> int
+fun int_copy(i)
+    return 0 // huh, this infinite loops...
+
+def chars = void -> int, int, int
+fun chars()
     return 72, 105, 33
 
 export main
 def main = void -> int
 fun main()
-    let h = hello(1,2,3)
-    let a, b, c = hi(hello(0, 1, 2), h)
+    let a, b, c = chars()
     putchar(a)
     putchar(b)
     putchar(c)
     putchar(10)
-    return 0
+    return a
 

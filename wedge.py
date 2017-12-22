@@ -3,6 +3,7 @@
 from lex import lex
 from parse import parse
 from scopecheck import scopecheck
+from escapecheck import escapecheck
 from typecheck import typecheck
 from depcheck import depcheck
 from emit import emit
@@ -45,7 +46,8 @@ def main(name, input, level='emit'):
     with open('%s.s.p' % name, 'w') as f:
         f.write(prettifyscope(scope))
     
-    scope = typecheck(scope)
+    typecheck(scope)
+    escapecheck(scope)
     with open('%s.t.p' % name, 'w') as f:
         f.write(prettifytypes(scope))
 

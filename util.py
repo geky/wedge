@@ -3,15 +3,12 @@
 def getline(line):
     while line and not isinstance(line, int):
         if isinstance(line, list):
-            for l in line:
-                line = getline(l)
-                if line:
-                    break
+            line = getline(line[0])
         else:
             try:
                 line = line.line
             except AttributeError:
-                pass
+                line = None
 
     return line
 

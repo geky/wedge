@@ -1,6 +1,9 @@
 
 # Types
 class IntT:
+    def __init__(self):
+        self.name = 'int' # hm
+
     def __repr__(self):
         return 'IntT()'
 

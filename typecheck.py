@@ -160,8 +160,5 @@ def typedecl(self):
         raise NotImplementedError("typedecl not implemented for %r" % self)
 
 def typecheck(scope):
-    for name in scope:
-        if hasattr(name, 'decl'):
-            typedecl(name.decl)
-
-    return scope
+    for sym in scope:
+        typedecl(sym.decl)
