@@ -1,5 +1,5 @@
-from syntax import *
-from type import *
+from wsyntax import *
+from wtypes import *
 from util import CompileException
 
 class ScopeException(CompileException):

@@ -1,4 +1,4 @@
-from syntax import *
+from wsyntax import *
 
 class Emitter:
     def __init__(self):

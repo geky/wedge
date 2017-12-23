@@ -1,5 +1,5 @@
-from syntax import *
-from type import *
+from wsyntax import *
+from wtypes import *
 from scopecheck import scopeexpr
 from typecheck import typeexpr
 

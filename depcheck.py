@@ -1,5 +1,5 @@
-from syntax import *
-from type import *
+from wsyntax import *
+from wtypes import *
 
 class Deps:
     def __init__(self):

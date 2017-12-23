@@ -1,5 +1,5 @@
-from syntax import *
-from type import *
+from wsyntax import *
+from wtypes import *
 from eval import eval
 from util import CompileException
 

@@ -1,7 +1,7 @@
 
 import rules
 import re
-from tokens import *
+from wtokens import *
 
 
 KEYWORDS = {

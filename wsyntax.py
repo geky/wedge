@@ -1,4 +1,4 @@
-from tokens import *
+from wtokens import *
 
 # Declarations
 class Def:

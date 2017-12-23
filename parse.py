@@ -1,7 +1,7 @@
 
-from tokens import *
-from syntax import *
-from type import *
+from wtokens import *
+from wsyntax import *
+from wtypes import *
 import rules
 import lex
 
