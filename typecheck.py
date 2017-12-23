@@ -9,7 +9,9 @@ class TypeException(CompileException):
 
 def typeexpect(self, expected, line=None):
     if expected is None:
-        return self
+        return self 
+    elif self is None:
+        return expected
     elif isinstance(expected, list) and isinstance(self, list):
         if len(expected) != len(self):
             raise TypeException("mismatched types %s and %s" %
@@ -76,6 +78,7 @@ def typestmt(self):
     elif isinstance(self, Return):
         expected = self.scope['return', 'types']
         self.types = typeexprs(self.exprs, expected)
+        self.scope['return'].types = self.types
     elif isinstance(self, Expr):
         typeexprs(self.exprs)
     else:
@@ -83,7 +86,8 @@ def typestmt(self):
 
 def typedecl(self):
     if isinstance(self, Fun):
-        type = typeexpect(self.sym.type, FunT([None for _ in self.args], None))
+        type = typeexpect(getattr(self.sym, 'type', None),
+            FunT([None for _ in self.args], None))
 
         self.ret.types = type.rets
         for arg, argtype in zip(self.args, type.args):
@@ -91,6 +95,11 @@ def typedecl(self):
 
         for stmt in self.stmts:
             typestmt(stmt)
+
+        type.rets = self.ret.types
+        if type.rets is None or any(ret is None for ret in type.rets):
+            raise TypeException("could not infer return type for \"%s\"" %
+                self.sym.name, self)
 
         self.sym.type = type
     elif isinstance(self, Type):
