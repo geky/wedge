@@ -23,7 +23,7 @@ def escapeexpr(self, home):
         if home:
             expr = Call(Sym("%s_copy" % self.type.name), [self])
             scopeexpr(expr, self.scope)
-            typeexpr(expr) # TODO assert type?
+            typeexpr(expr, self.type)
             return expr
         return self
     else:

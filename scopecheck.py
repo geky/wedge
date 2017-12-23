@@ -22,6 +22,17 @@ class Scope:
             setattr(sym, k, v)
         return Scope(sym, self)
 
+    def bindall(self, syms):
+        for sym in syms:
+            if isinstance(sym, tuple):
+                sym, attrs = sym
+            else:
+                sym, attrs = sym, {}
+
+            self = self.bind(sym, **attrs)
+
+        return self
+
     def __getitem__(self, sym):
         if isinstance(sym, tuple):
             sym, attr = sym

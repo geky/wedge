@@ -4,12 +4,6 @@ extern putchar = int -> int
 
 type hello
     def a = int
-    def b = int
-    def c = int
-
-def int_copy = int -> int
-fun int_copy(i)
-    return 0 // huh, this infinite loops...
 
 def chars = void -> int, int, int
 fun chars()
@@ -23,5 +17,5 @@ fun main()
     putchar(b)
     putchar(c)
     putchar(10)
-    return a
+    return 0
 
