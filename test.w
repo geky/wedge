@@ -9,14 +9,13 @@ def int_copy = int -> int
 fun int_copy(a)
     return 0
 
-fun chars(a)
-    def b = int
-    let b = a
+def chars = void -> int, int, int
+fun chars()
     return 72, 105, 33
 
 export main
 fun main()
-    let a, b, c = chars(1)
+    let a, b, c = chars()
     putchar(a)
     putchar(b)
     putchar(c)

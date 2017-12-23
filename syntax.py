@@ -2,13 +2,12 @@ from tokens import *
 
 # Declarations
 class Def:
-    def __init__(self, sym=None, type=None):
-        assert isinstance(sym, Sym)
-        self.sym = sym
-        self.type = type
+    def __init__(self, syms=None, exprs=None):
+        self.syms = syms
+        self.exprs = exprs
 
     def __repr__(self):
-        return 'Def(%r, %r)' % (self.sym, self.type)
+        return 'Def(%r, %r)' % (self.syms, self.exprs)
 
 class Let:
     def __init__(self, syms=None, exprs=None):
@@ -47,13 +46,12 @@ class Export:
         return 'Export(%r)' % self.sym
 
 class Extern:
-    def __init__(self, sym=None, type=None):
-        assert isinstance(sym, Sym)
-        self.sym = sym
-        self.type = type
+    def __init__(self, sym=None, exprs=None):
+        self.syms = sym
+        self.exprs = exprs
 
     def __repr__(self):
-        return 'Extern(%r)' % self.sym
+        return 'Extern(%r, %r)' % (self.syms, self.exprs)
 
 # Statements
 class Return:

@@ -33,19 +33,39 @@ def parsetype(p):
     assert len(ts) == 1 # TODO
     return ts[0]
 
-def parseexpr(p):
+def parseframe(p):
     if p.accept(Sym):
         sym = p.match
         if p.accept('('):
-            args = p.expect(rules.sepby(parseexpr, ','))
+            args = p.expect(rules.sepby(parseframe, ','))
             p.expect(')')
             return Call(sym, args)
         else:
             return sym
     elif p.accept(Num):
         return p.match
+    elif p.accept('int'):
+        return IntT()
     else:
         raise p.unexpected()
+
+def parseexprs(p):
+    if p.accept('void'):
+        exprs = []
+    else:
+        exprs = p.expect(rules.sepby(parseframe, ','))
+
+    if p.accept('->'):
+        rets = p.expect(parseexprs)
+        exprs = [FunT(exprs, rets)]
+
+    return exprs
+
+def parseexpr(p):
+    exprs = parseexprs(p)
+    if len(exprs) != 1:
+        raise p.unexpected(',')
+    return exprs[0]
 
 def parsefnstmt(p):
     if p.accept('{'):
@@ -53,19 +73,19 @@ def parsefnstmt(p):
         p.expect('}')
         return s
     elif p.accept('return'):
-        return Return(p.expect(rules.sepby(parseexpr, ',')))
+        return Return(p.expect(parseexprs))
     elif p.accept('let'):
         names = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
-        values = p.expect(rules.sepby(parseexpr, ','))
-        return Let(names, values)
+        exprs = p.expect(parseexprs)
+        return Let(names, exprs)
     elif p.accept('def'):
-        name = p.expect(Sym)
+        name = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
-        value = p.expect(parsetype)
-        return Def(name, value)
+        exprs = p.expect(parseexprs)
+        return Def(name, exprs)
     else:
-        exprs = p.expect(rules.sepby(parseexpr, ','))
+        exprs = p.expect(parseexprs)
         return Expr(exprs) if len(exprs) > 0 else None
 
 def parsetypestmt(p):
@@ -74,10 +94,10 @@ def parsetypestmt(p):
         p.expect('}')
         return s
     elif p.accept('def'):
-        name = p.expect(Sym)
+        name = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
-        value = p.expect(parsetype)
-        return Def(name, value)
+        exprs = p.expect(parseexprs)
+        return Def(name, exprs)
     else:
         return None
 
@@ -104,24 +124,19 @@ def parsedecl(p):
         p.expect('}')
 
         return Type(name, stmts)
-    elif p.accept('let'):
-        name = p.expect(Sym)
-        p.expect('=')
-        value = p.expect(parseexpr)
-        return Let(name, value)
     elif p.accept('def'):
-        name = p.expect(Sym)
+        name = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
-        value = p.expect(parsetype)
-        return Def(name, value)
+        exprs = p.expect(parseexprs)
+        return Def(name, exprs)
     elif p.accept('export'):
         name = p.expect(Sym)
         return Export(name)
     elif p.accept('extern'):
-        name = p.expect(Sym)
+        name = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
-        value = p.expect(parsetype)
-        return Extern(name, value)
+        exprs = p.expect(parseexprs)
+        return Extern(name, exprs)
     else:
         raise p.unexpected()
 

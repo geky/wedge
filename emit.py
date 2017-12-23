@@ -140,7 +140,8 @@ def emitdecl(self, e):
     elif isinstance(self, Export):
         pass
     elif isinstance(self, Extern):
-        e.globals.append(['declare i32 %s(i32)' % emitsym(self.sym)])
+        for sym in self.syms:
+            e.globals.append(['declare i32 %s(i32)' % emitsym(sym)])
     else:
         raise NotImplementedError("emitdecl not implemented for %r" % self)
 

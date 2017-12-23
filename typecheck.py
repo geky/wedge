@@ -17,6 +17,8 @@ def typeexpect(self, expected, line=None):
             raise TypeException("mismatched types %s and %s" %
                 (self, expected), line or self)
         return [typeexpect(s, t, line) for s, t in zip(self, expected)]
+    elif isinstance(expected, TypeT) and isinstance(self, TypeT):
+        return self
     elif isinstance(expected, IntT) and isinstance(self, IntT):
         return self
     elif isinstance(expected, FunT) and isinstance(self, FunT):
@@ -44,6 +46,12 @@ def typeframe(self, expected=None):
         return self.types
     elif isinstance(self, Num):
         self.type = typeexpect([IntT()], expected, self)[0]
+        return [self.type]
+    elif isinstance(self, IntT):
+        self.type = typeexpect([TypeT()], expected, self)[0]
+        return [self.type]
+    elif isinstance(self, FunT):
+        self.type = typeexpect([TypeT()], expected, self)[0]
         return [self.type]
     elif isinstance(self, Sym):
         self.type = typeexpect([self.type], expected, self)[0]
@@ -73,8 +81,9 @@ def typestmt(self):
         for sym, type in zip(self.syms, types):
             sym.type = type
     elif isinstance(self, Def):
-        assert self.type
-        self.sym.type = eval(self.type)
+        for sym, expr in zip(self.syms, self.exprs):
+            typeexpr(expr, TypeT())
+            sym.type = eval(expr)
     elif isinstance(self, Return):
         expected = self.scope['return', 'types']
         self.types = typeexprs(self.exprs, expected)
@@ -107,16 +116,20 @@ def typedecl(self):
             typestmt(stmt)
 
         self.sym.type = TypeT()
-        self.ctor.sym.type = FunT([stmt.sym.type for stmt in self.stmts], [self.sym])
+        self.ctor.sym.type = FunT([sym.type
+            for sym in stmt.syms
+            for stmt in self.stmts], [self.sym])
         typedecl(self.ctor)
     elif isinstance(self, Extern):
-        assert self.type
-        self.sym.type = eval(self.type)
+        for sym, expr in zip(self.syms, self.exprs):
+            typeexpr(expr, TypeT())
+            sym.type = eval(expr)
     elif isinstance(self, Export):
         pass
     elif isinstance(self, Def):
-        assert self.type
-        self.sym.type = eval(self.type)
+        for sym, expr in zip(self.syms, self.exprs):
+            typeexpr(expr, TypeT())
+            sym.type = eval(expr)
     else:
         raise NotImplementedError("typedecl not implemented for %r" % self)
 
