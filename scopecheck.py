@@ -18,6 +18,7 @@ class Scope:
         assert isinstance(sym, Sym)
 
         sym.scope = self
+        sym.constraints = []
         for k, v in kwargs.items():
             setattr(sym, k, v)
         return Scope(sym, self)
@@ -136,24 +137,24 @@ def scopedecl(self, scope):
         self.scope = scope
         scope = scope.bind(self.sym, local=False, decl=self, impl=self)
 
-        ns = scope
+        nscope = scope
         self.ret = Sym('return')
-        ns = ns.bind(self.ret)
+        nscope = nscope.bind(self.ret)
 
         for arg in self.args:
-            ns = ns.bind(arg, decl=self, impl=self)
+            nscope = nscope.bind(arg, decl=self, impl=self)
 
         for stmt in self.stmts:
-            ns = scopestmt(stmt, ns)
+            nscope = scopestmt(stmt, nscope)
 
         return scope
     elif isinstance(self, Type):
         self.scope = scope
         scope = scope.bind(self.sym, local=False, decl=self, impl=self)
 
-        ns = scope
+        nscope = scope
         for stmt in self.stmts:
-            ns = scopestmt(stmt, ns)
+            nscope = scopestmt(stmt, nscope)
 
         self.ctor = Fun(Sym('%s.ctor' % self.sym.name),
             [Sym(sym.name)

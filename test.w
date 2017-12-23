@@ -5,8 +5,12 @@ extern putchar = int -> int
 type hello
     def a = int
 
-def int_copy = int -> int
+def hi = int -> int
+fun hi(a)
+    return 0
+
 fun int_copy(a)
+    hi(a)
     return 0
 
 def chars = void -> int, int, int

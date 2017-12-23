@@ -39,6 +39,9 @@ def typeframe(self, expected=None):
     if isinstance(self, Call):
         argtypes = [typeexpr(expr) for expr in self.exprs]
         ftype = typeexpr(self.sym, FunT(argtypes, None))
+
+        argtypes = [typeexpr(expr, arg)
+            for expr, arg in zip(self.exprs, ftype.args)]
         rettypes = typeexpect(ftype.rets, expected)
 
         self.types = rettypes
@@ -55,6 +58,7 @@ def typeframe(self, expected=None):
         return [self.type]
     elif isinstance(self, Sym):
         self.type = typeexpect([self.type], expected, self)[0]
+        self.constraints.append(self.type)
         return [self.type]
     else:
         raise NotImplementedError("typeexpr not implemented for %r" % self)
@@ -109,6 +113,11 @@ def typedecl(self):
         if type.rets is None or any(ret is None for ret in type.rets):
             raise TypeException("could not infer return type for \"%s\"" %
                 self.sym.name, self)
+
+        for arg in self.args:
+            for constraint in arg.constraints:
+                arg.type = typeexpect(arg.type, constraint)
+        type.args = [arg.type for arg in self.args]
 
         self.sym.type = type
     elif isinstance(self, Type):
