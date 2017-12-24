@@ -51,7 +51,21 @@ class Sym:
         if attr != 'scope':
             if hasattr(self, 'scope'):
                 try:
-                    return self.scope[self, attr]
-                except KeyError:
+                    return self.scope.getattr(self, attr)
+                except AttributeError:
                     pass
+
+                if attr.endswith('s'):
+                    if getattr(self, 'local', True):
+                        try:
+                            return [getattr(self, attr[:-1])]
+                        except AttributeError:
+                            pass
+                    else:
+                        attrs = list(self.scope.getattrs(self, attr[:-1]))
+                        if attr[:-1] in self.__dict__:
+                            attrs.append(self.__dict__[attr[:-1]])
+                        if attrs:
+                            return attrs
+                        
         raise AttributeError("%r has no attribute %r" % (self, attr))

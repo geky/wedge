@@ -19,7 +19,9 @@ class CompileException(Exception):
 
     def __str__(self):
         if self.line:
-            return "%s line %d" % (self.message, self.line)
+            lines = self.message.split('\n')
+            lines[0] = "%s line %d" % (lines[0], self.line)
+            return "\n".join(lines)
         else:
-            return "%s" % self.message
+            return self.message
     

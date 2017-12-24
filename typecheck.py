@@ -24,19 +24,59 @@ def typeexpect(self, expected, line=None):
     elif isinstance(expected, FunT) and isinstance(self, FunT):
         return FunT(typeexpect(self.args, expected.args, line),
             typeexpect(self.rets, expected.rets, line))
-    elif isinstance(self, Sym):
+    elif isinstance(expected, Sym) and isinstance(self, Sym):
         if not isinstance(self.type, TypeT):
             raise TypeException("not a type %r" %
                 self.type, line or self)
 
-        self.type = typeexpect(self.type, expected, line)
-        return self.type
+        if self != expected:
+            raise TypeException("mismatched types %s and %s" %
+                (self, expected), line or self)
+
+        return self
     else:
         raise TypeException("mismatched types %s and %s" %
             (self, expected), line or self)
 
+def typeselect(self, overloads, expected, line=None):
+    assert len(overloads) > 0
+
+    if len(overloads) == 1:
+        sym, type = overloads[0]
+        type = typeexpect(type, expected, line)
+        return sym, type
+    else:
+        options = []
+        for sym, type in overloads:
+            try:
+                type = typeexpect(type, expected, line)
+                options.append((sym, type))
+            except TypeException:
+                pass
+
+        if len(options) == 0:
+            raise TypeException(
+                '\n'.join(["no valid overload for %r, %r" % (self, expected)] +
+                    ['%r' % type for _, type in overloads]), line or self)
+        elif len(options) > 1:
+            raise TypeException(
+                '\n'.join(["ambiguous overload for %r, %r" % (self, expected)] +
+                    ['%r' % type for _, type in options]), line or self)
+        else:
+            return options[0]
+
 def typeframe(self, expected=None):
     if isinstance(self, Call):
+        # TODO, grody hack, should this go somewhere else?
+        try:
+            ftype = typeexpr(self.sym, None)
+            if isinstance(ftype, TypeT):
+                ctor = Sym('%s.ctor' % self.sym.name)
+                self.scope.bind(ctor, type=None)
+                self.sym = ctor
+        except TypeException:
+            pass
+
         argtypes = [typeexpr(expr) for expr in self.exprs]
         ftype = typeexpr(self.sym, FunT(argtypes, None))
 
@@ -54,10 +94,33 @@ def typeframe(self, expected=None):
         self.type = typeexpect([TypeT()], expected, self)[0]
         return [self.type]
     elif isinstance(self, FunT):
+        for arg in self.args:
+            typeexpr(arg, TypeT())
+        for ret in self.rets:
+            typeexpr(ret, TypeT())
+
         self.type = typeexpect([TypeT()], expected, self)[0]
         return [self.type]
     elif isinstance(self, Sym):
-        self.type = typeexpect([self.type], expected, self)[0]
+        if not hasattr(self, 'type'):
+            for decl in self.decls:
+                # Catches recursive types
+                # TODO decide if this is a hack or not
+                if self in typedecl.active:
+                    raise TypeException("Can't resolve recursive type", self)
+
+                typedecl(decl)
+
+            if not hasattr(self, 'type'):
+                raise TypeException("Unable to infer type %r" %
+                    self, self)
+
+        overloads = [(sym, sym.type) for sym in self.scope.filter(self, 'impl')]
+
+        expected = typeexpect([None], expected, self) # TODO hm
+        sym, type = typeselect(self, overloads, expected[0])
+        self.scope = sym.nscope
+        self.type = type
         self.constraints.append(self.type)
         return [self.type]
     else:
@@ -89,7 +152,7 @@ def typestmt(self):
             typeexpr(expr, TypeT())
             sym.type = eval(expr)
     elif isinstance(self, Return):
-        expected = self.scope['return', 'types']
+        expected = self.scope['return'].types
         self.types = typeexprs(self.exprs, expected)
         self.scope['return'].types = self.types
     elif isinstance(self, Expr):
@@ -98,7 +161,10 @@ def typestmt(self):
         raise NotImplementedError("typestmt not implemented for %r" % self)
 
 def typedecl(self):
+    # TODO memoize?
     if isinstance(self, Fun):
+        typedecl.active.add(self.sym)
+
         type = typeexpect(getattr(self.sym, 'type', None),
             FunT([None for _ in self.args], None))
 
@@ -120,6 +186,8 @@ def typedecl(self):
         type.args = [arg.type for arg in self.args]
 
         self.sym.type = type
+
+        typedecl.active.remove(self.sym)
     elif isinstance(self, Type):
         for stmt in self.stmts:
             typestmt(stmt)
@@ -141,6 +209,8 @@ def typedecl(self):
             sym.type = eval(expr)
     else:
         raise NotImplementedError("typedecl not implemented for %r" % self)
+
+typedecl.active = set()
 
 def typecheck(scope):
     for sym in scope:

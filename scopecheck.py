@@ -21,7 +21,8 @@ class Scope:
         sym.constraints = []
         for k, v in kwargs.items():
             setattr(sym, k, v)
-        return Scope(sym, self)
+        sym.nscope = Scope(sym, self)
+        return sym.nscope
 
     def bindall(self, syms):
         for sym in syms:
@@ -34,22 +35,48 @@ class Scope:
 
         return self
 
-    def __getitem__(self, sym):
-        if isinstance(sym, tuple):
-            sym, attr = sym
-        else:
-            sym, attr = sym, None
-
+    def getattr(self, sym, attr):
         if isinstance(sym, str):
             sym = Sym(sym)
 
         while self:
-            if attr:
-                if sym == self.sym and hasattr(self.sym, attr):
-                    return getattr(self.sym, attr)
-            else:
-                if sym == self.sym:
-                    return self.sym
+            if sym == self.sym and attr in self.sym.__dict__:
+                return self.sym.__dict__[attr]
+            self = self.tail
+        else:
+            raise AttributeError("%r has no attribute %r" % (sym, attr))
+
+    def getattrs(self, sym, attr):
+        if isinstance(sym, str):
+            sym = Sym(sym)
+
+        attrs = []
+        while self:
+            if sym == self.sym and attr in self.sym.__dict__:
+                attrs.append(self.sym.__dict__[attr])
+            self = self.tail
+
+        return reversed(attrs)
+
+    def filter(self, sym, attr):
+        if isinstance(sym, str):
+            sym = Sym(sym)
+
+        attrs = []
+        while self:
+            if sym == self.sym and attr in self.sym.__dict__:
+                attrs.append(self.sym)
+            self = self.tail
+
+        return reversed(attrs)
+
+    def __getitem__(self, sym):
+        if isinstance(sym, str):
+            sym = Sym(sym)
+
+        while self:
+            if sym == self.sym:
+                return self.sym
             self = self.tail
         else:
             raise KeyError(sym)
@@ -96,7 +123,10 @@ def scopeexpr(self, scope):
     elif isinstance(self, IntT):
         pass
     elif isinstance(self, FunT):
-        pass
+        for arg in self.args:
+            scopeexpr(arg, scope)
+        for ret in self.rets:
+            scopeexpr(ret, scope)
     elif isinstance(self, Sym):
         if self not in scope or not hasattr(scope[self], 'decl'):
             raise ScopeException("Symbol not in scope %s" % self, self)
@@ -113,7 +143,7 @@ def scopestmt(self, scope):
         self.scope = scope
         scopeexprs(self.exprs, scope)
         for sym in self.syms:
-            scope = scope.bind(sym, decl=self)
+            scope = scope.bind(sym, decl=self, impl=self)
         return scope
     elif isinstance(self, Def):
         self.scope = scope
@@ -132,11 +162,38 @@ def scopestmt(self, scope):
     else:
         raise NotImplementedError("scopestmt not implemented for %r" % self)
 
-def scopedecl(self, scope):
+def scandecl(self, scope):
     if isinstance(self, Fun):
+        self.scope = scope
+        return scope.bind(self.sym, local=False, decl=self, impl=self)
+    elif isinstance(self, Type):
         self.scope = scope
         scope = scope.bind(self.sym, local=False, decl=self, impl=self)
 
+        self.ctor = Fun(Sym('%s.ctor' % self.sym.name),
+            [Sym(sym.name)
+                for stmt in self.stmts
+                for sym in stmt.syms], [])
+        scope = scandecl(self.ctor, scope)
+        return scope
+    elif isinstance(self, Extern):
+        self.scope = scope
+        for sym in self.syms:   
+            scope = scope.bind(sym, local=False, decl=self, impl=self)
+        return scope
+    elif isinstance(self, Export):
+        self.scope = scope
+        return scope.bind(self.sym, local=False, decl=self, export=True)
+    elif isinstance(self, Def):
+        self.scope = scope
+        for sym in self.syms:
+            scope = scope.bind(sym, local=False, decl=self)
+        return scope
+    else:
+        raise NotImplementedError("scopedecl not implemented for %r" % self)
+
+def scopedecl(self, scope):
+    if isinstance(self, Fun):
         nscope = scope
         self.ret = Sym('return')
         nscope = nscope.bind(self.ret)
@@ -149,32 +206,19 @@ def scopedecl(self, scope):
 
         return scope
     elif isinstance(self, Type):
-        self.scope = scope
-        scope = scope.bind(self.sym, local=False, decl=self, impl=self)
-
         nscope = scope
         for stmt in self.stmts:
             nscope = scopestmt(stmt, nscope)
 
-        self.ctor = Fun(Sym('%s.ctor' % self.sym.name),
-            [Sym(sym.name)
-                for sym in stmt.syms
-                for stmt in self.stmts], [])
-        return scopedecl(self.ctor, scope)
+        scope = scopedecl(self.ctor, scope)
+        return scope
     elif isinstance(self, Extern):
-        self.scope = scope
         scopeexprs(self.exprs, scope)
-        for sym in self.syms:   
-            scope = scope.bind(sym, local=False, decl=self, impl=self)
         return scope
     elif isinstance(self, Export):
-        self.scope = scope
-        return scope.bind(self.sym, local=False, decl=self, export=True)
+        return scope
     elif isinstance(self, Def):
-        self.scope = scope
         scopeexprs(self.exprs, scope)
-        for sym in self.syms:
-            scope = scope.bind(sym, local=False, decl=self)
         return scope
     else:
         raise NotImplementedError("scopedecl not implemented for %r" % self)
@@ -183,6 +227,17 @@ def scopecheck(ptree):
     scope = Scope()
 
     for decl in ptree:
+        scope = scandecl(decl, scope)
+
+    for decl in ptree:
         scope = scopedecl(decl, scope)
+
+    # This mess just consolidates any overloaded attributes
+ #    for sym in scope:
+ #        for attr in ['decl', 'impl']:
+ #            if hasattr(sym, attr):
+ #                if not hasattr(scope[sym], '%ss' % attr):
+ #                    setattr(scope[sym], '%ss' % attr, [])
+ #                getattr(scope[sym], '%ss' % attr).append(getattr(sym, attr))
 
     return scope

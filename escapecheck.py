@@ -34,6 +34,9 @@ def escapeexprs(self, homes):
         if homes and homes[0]:
             self[0].homes = homes
             self[0].home = homes[0]
+
+        self[0].sym = escapeexpr(self[0].sym, None)
+        self[0].exprs = [escapeexpr(expr, None) for expr in self[0].exprs]
         return self
     else:
         return [escapeexpr(expr, home)
