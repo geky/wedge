@@ -18,13 +18,13 @@ def prettifytokens(things):
     return '\n'.join(['[']+['    %s,' % ', '.join(['%r' % t for t, _ in g]) for _, g in groupby(things, key=lambda v: v[1])]+[']'])
 
 def prettifyscope(things):
-    return '\n'.join(['[']+['    %s: %r,' % (s, s.__dict__) for s in things]+[']'])
+    return '\n'.join(['[']+['    %r: %r,' % (s, s.__dict__) for s in things]+[']'])
 
 def prettifytypes(things):
-    return '\n'.join(['[']+['    %s: %r,' % (s, s.type) for s in things if hasattr(s, 'type')]+[']'])
+    return '\n'.join(['[']+['    %r: %r,' % (s, s.type) for s in things if hasattr(s, 'type')]+[']'])
 
 def prettifydeps(things):
-    return '\n'.join(['[']+['    %s: %r,' % (s, s.decl) for s in things if hasattr(s, 'decl')]+[']'])
+    return '\n'.join(['[']+['    (%r, %r): %r,' % (s, s.type, s.impl) for s in things if hasattr(s, 'decl')]+[']'])
 
 def main(name, input, level='emit'):
     # Lexical analysis

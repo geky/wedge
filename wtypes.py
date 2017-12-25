@@ -13,6 +13,9 @@ class IntT:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        return hash(IntT)
+
 class FunT:
     def __init__(self, args, rets):
         self.args = args
@@ -30,18 +33,23 @@ class FunT:
     def __ne__(self, other):
         return not self.__eq__(other)
 
-class StructT:
-    def __init__(self, syms, types):
-        self.syms = syms
-        self.types = types
+    def __hash__(self):
+        return (hash(FunT) +
+            sum(hash(arg) for arg in self.args) +
+            sum(hash(ret) for ret in self.rets))
 
-    def __repr__(self):
-        return 'StructT(%r, %r)' % (self.syms, self.types)
-
-    def __eq__(self, other):
-        return (
-            isinstance(other, StructT) and
-            self.types == other.types)
+#class StructT:
+#    def __init__(self, syms, types):
+#        self.syms = syms
+#        self.types = types
+#
+#    def __repr__(self):
+#        return 'StructT(%r, %r)' % (self.syms, self.types)
+#
+#    def __eq__(self, other):
+#        return (
+#            isinstance(other, StructT) and
+#            self.types == other.types)
 
 class TypeT:
     def __repr__(self):
@@ -52,3 +60,6 @@ class TypeT:
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash(TypeT)

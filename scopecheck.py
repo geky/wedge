@@ -179,7 +179,7 @@ def scandecl(self, scope):
     elif isinstance(self, Extern):
         self.scope = scope
         for sym in self.syms:   
-            scope = scope.bind(sym, local=False, decl=self, impl=self)
+            scope = scope.bind(sym, local=False, decl=self, impl=self, extern=True)
         return scope
     elif isinstance(self, Export):
         self.scope = scope

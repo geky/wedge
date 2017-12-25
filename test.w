@@ -9,12 +9,13 @@ def hm = void -> hello
 fun hm()
     return hello(0)
 
-fun hey(a)
-    return hi(a)
+//fun hey(a)
+//    return hi(a)
 
 def chars = void -> int, int, int
 fun chars()
     hi(hm())
+    hi(0)
     return 72, 105, 33
 
 def hi = hello -> int
@@ -31,6 +32,7 @@ fun main()
     putchar(a)
     putchar(b)
     putchar(c)
-    putchar(10)
+    let a = 10
+    putchar(a)
     return 0
 

@@ -9,7 +9,7 @@ class TypeException(CompileException):
 
 def typeexpect(self, expected, line=None):
     if expected is None:
-        return self 
+        return self
     elif self is None:
         return expected
     elif isinstance(expected, list) and isinstance(self, list):
@@ -102,27 +102,32 @@ def typeframe(self, expected=None):
         self.type = typeexpect([TypeT()], expected, self)[0]
         return [self.type]
     elif isinstance(self, Sym):
-        if not hasattr(self, 'type'):
-            for decl in self.decls:
-                # Catches recursive types
-                # TODO decide if this is a hack or not
-                if self in typedecl.active:
-                    raise TypeException("Can't resolve recursive type", self)
-
-                typedecl(decl)
-
+        if getattr(self, 'local', True):
+            self.type = typeexpect([self.type], expected, self)[0]
+            self.constraints.append(self.type)
+            return [self.type]
+        else:
             if not hasattr(self, 'type'):
-                raise TypeException("Unable to infer type %r" %
-                    self, self)
+                for decl in self.decls:
+                    # Catches recursive types
+                    # TODO decide if this is a hack or not
+                    if self in typedecl.active:
+                        raise TypeException("Can't resolve recursive type", self)
 
-        overloads = [(sym, sym.type) for sym in self.scope.filter(self, 'impl')]
+                    typedecl(decl)
 
-        expected = typeexpect([None], expected, self) # TODO hm
-        sym, type = typeselect(self, overloads, expected[0])
-        self.scope = sym.nscope
-        self.type = type
-        self.constraints.append(self.type)
-        return [self.type]
+                if not hasattr(self, 'type'):
+                    raise TypeException("Unable to infer type %r" %
+                        self, self)
+
+            overloads = [(sym, sym.type) for sym in self.scope.filter(self, 'impl')]
+
+            expected = typeexpect([None], expected, self) # TODO hm
+            sym, type = typeselect(self, overloads, expected[0])
+            self.scope = sym.nscope
+            self.type = type
+            self.constraints.append(self.type)
+            return [self.type]
     else:
         raise NotImplementedError("typeexpr not implemented for %r" % self)
 

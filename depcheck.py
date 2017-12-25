@@ -3,7 +3,7 @@ from wtypes import *
 
 class Deps:
     def __init__(self):
-        self.syms = set()
+        self.matches = set()
         self.targets = []
 
     def append(self, sym):
@@ -11,15 +11,15 @@ class Deps:
         assert hasattr(sym, 'type')
         assert hasattr(sym, 'impl')
 
-        if sym in self.syms:
+        if (sym, sym.type) in self.matches:
             return
 
-        self.syms.add(sym)
+        self.matches.add((sym, sym.type))
         self.targets.append(sym)
         depdecl(sym.impl, self)
 
     def __contains__(self, sym):
-        return sym in self.syms
+        return (sym, sym.type) in self.syms
 
     def __iter__(self):
         return iter(self.targets)
