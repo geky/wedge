@@ -50,10 +50,11 @@ class Sym:
     def __getattr__(self, attr):
         if attr != 'scope':
             if hasattr(self, 'scope'):
-                try:
-                    return self.scope.getattr(self, attr)
-                except AttributeError:
-                    pass
+                if 'def_' not in self.__dict__:
+                    try:
+                        return self.scope.getattr(self, attr)
+                    except AttributeError:
+                        pass
 
                 if attr.endswith('s'):
                     if getattr(self, 'local', True):
@@ -69,3 +70,9 @@ class Sym:
                             return attrs
                         
         raise AttributeError("%r has no attribute %r" % (self, attr))
+
+    def sub(self, sym, rep):
+        if sym == self:
+            return rep
+        else:
+            return self

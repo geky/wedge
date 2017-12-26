@@ -69,6 +69,8 @@ def escapedecl(self):
         pass
     elif isinstance(self, Type):
         pass
+    elif isinstance(self, Interface):
+        pass
     else:
         raise NotImplementedError("escapedecl not implemented for %r" % self)
 

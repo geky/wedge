@@ -7,9 +7,10 @@ from wtokens import *
 KEYWORDS = {
     "let",
     "def",
-    "is",
     "fun",
     "type",
+    "interface",
+    "impl",
     "return",
     "if",
     "else",

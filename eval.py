@@ -16,7 +16,7 @@ def eval(self):
     elif isinstance(self, FunT):
         self.value = self
         return self
-    elif isinstance(self, StructT):
+    elif isinstance(self, InterfaceT):
         self.value = self
         return self
     elif isinstance(self, TypeT):

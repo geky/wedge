@@ -37,6 +37,23 @@ class Type:
     def __repr__(self):
         return 'Type(%r, %r)' % (self.sym, self.stmts)
 
+class Interface:
+    def __init__(self, sym=None, stmts=[]):
+        assert isinstance(sym, Sym)
+        self.sym = sym
+        self.stmts = stmts
+
+    def __repr__(self):
+        return 'Interface(%r, %r)' % (self.sym, self.stmts)
+
+class Impl:
+    def __init__(self, sym=None):
+        assert isinstance(sym, Sym)
+        self.sym = sym
+
+    def __repr__(self):
+        return 'Impl(%r)' % self.sym
+
 class Export:
     def __init__(self, sym=None):
         assert isinstance(sym, Sym)

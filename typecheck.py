@@ -103,24 +103,26 @@ def typeframe(self, expected=None):
         return [self.type]
     elif isinstance(self, Sym):
         if getattr(self, 'local', True):
-            self.type = typeexpect([self.type], expected, self)[0]
+            self.type = typeexpect([getattr(self, 'type', None)], expected, self)[0]
             self.constraints.append(self.type)
             return [self.type]
         else:
-            if not hasattr(self, 'type'):
-                for decl in self.decls:
-                    # Catches recursive types
-                    # TODO decide if this is a hack or not
-                    if self in typedecl.active:
-                        raise TypeException("Can't resolve recursive type", self)
+            overloads = []
+            for sym in self.scope.filter(self, 'impl'):
+                if not hasattr(sym, 'type'):
+                    for decl in sym.decls:
+                        # Catches recursive types
+                        # TODO decide if this is a hack or not
+                        if sym in typedecl.active:
+                            raise TypeException("Can't resolve recursive type", sym)
 
-                    typedecl(decl)
+                        typedecl(decl)
 
-                if not hasattr(self, 'type'):
+                if not hasattr(sym, 'type'):
                     raise TypeException("Unable to infer type %r" %
-                        self, self)
+                        sym, sym)
 
-            overloads = [(sym, sym.type) for sym in self.scope.filter(self, 'impl')]
+                overloads.append((sym, sym.type))
 
             expected = typeexpect([None], expected, self) # TODO hm
             sym, type = typeselect(self, overloads, expected[0])
@@ -145,7 +147,7 @@ def typeexprs(self, expected=None):
                 (self, expected), self)
         return [typeexpr(expr, t) for expr, t in zip(self, expected)]
 
-def typestmt(self):
+def typestmt(self, decl):
     if isinstance(self, Let):
         expected = [getattr(sym, 'type', None) for sym in self.syms]
         types = typeexprs(self.exprs, expected)
@@ -156,6 +158,18 @@ def typestmt(self):
         for sym, expr in zip(self.syms, self.exprs):
             typeexpr(expr, TypeT())
             sym.type = eval(expr)
+    elif isinstance(self, Impl):
+        typeexpr(self.sym, TypeT())
+        interface = eval(self.sym)
+        for sym, type in interface.funs:
+            # try to find implementation of expected functions
+            # TODO make this cleaner?
+            nsym = Sym(sym.name)
+            self.scope.bind(nsym)
+            ntype = type.sub(interface.sym, decl.sym)
+            res = typeexpr(nsym, ntype)
+
+        interface.impls.add(decl.sym)
     elif isinstance(self, Return):
         expected = self.scope['return'].types
         self.types = typeexprs(self.exprs, expected)
@@ -178,7 +192,7 @@ def typedecl(self):
             arg.type = argtype
 
         for stmt in self.stmts:
-            typestmt(stmt)
+            typestmt(stmt, self)
 
         type.rets = self.ret.types
         if type.rets is None or any(ret is None for ret in type.rets):
@@ -194,14 +208,30 @@ def typedecl(self):
 
         typedecl.active.remove(self.sym)
     elif isinstance(self, Type):
-        for stmt in self.stmts:
-            typestmt(stmt)
-
         self.sym.type = TypeT()
+        for stmt in self.stmts:
+            typestmt(stmt, self)
+
         self.ctor.sym.type = FunT([sym.type
             for sym in stmt.syms
-            for stmt in self.stmts], [self.sym])
+            for stmt in self.stmts if isinstance(stmt, Def)], [self.sym])
         typedecl(self.ctor)
+    elif isinstance(self, Interface):
+        self.sym.type = TypeT()
+        for stmt in self.stmts:
+            typestmt(stmt, self)
+
+        for fun, type in zip(self.funs, (sym.type
+                for stmt in self.stmts
+                for sym in stmt.syms)):
+            fun.sym.type = type
+            fun.args = [Sym('_') for _ in type.args]
+            for arg in fun.args:
+                self.scope.bind(arg)
+            typedecl(fun)
+
+        self.sym.value = InterfaceT(self.sym,
+            [(fun.sym, fun.sym.type) for fun in self.funs])
     elif isinstance(self, Extern):
         for sym, expr in zip(self.syms, self.exprs):
             typeexpr(expr, TypeT())

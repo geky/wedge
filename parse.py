@@ -98,6 +98,22 @@ def parsetypestmt(p):
         p.expect('=')
         exprs = p.expect(parseexprs)
         return Def(name, exprs)
+    elif p.accept('impl'):
+        name = p.expect(Sym)
+        return Impl(name)
+    else:
+        return None
+
+def parseinterfacestmt(p):
+    if p.accept('{'):
+        s = parsetypestmt(p)
+        p.expect('}')
+        return s
+    elif p.accept('def'):
+        name = p.expect(rules.sepby(Sym, ','))
+        p.expect('=')
+        exprs = p.expect(parseexprs)
+        return Def(name, exprs)
     else:
         return None
 
@@ -124,6 +140,15 @@ def parsedecl(p):
         p.expect('}')
 
         return Type(name, stmts)
+    elif p.accept('interface'):
+        name = p.expect(Sym)
+
+        p.expect('{')
+        stmts = p.expect(rules.sepby(parseinterfacestmt, ';'))
+        stmts = [s for s in stmts if s]
+        p.expect('}')
+
+        return Interface(name, stmts)
     elif p.accept('def'):
         name = p.expect(rules.sepby(Sym, ','))
         p.expect('=')

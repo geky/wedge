@@ -42,9 +42,11 @@ class Scope:
         while self:
             if sym == self.sym and attr in self.sym.__dict__:
                 return self.sym.__dict__[attr]
+            if sym == self.sym and 'def_' in self.sym.__dict__:
+                break
             self = self.tail
-        else:
-            raise AttributeError("%r has no attribute %r" % (sym, attr))
+
+        raise AttributeError("%r has no attribute %r" % (sym, attr))
 
     def getattrs(self, sym, attr):
         if isinstance(sym, str):
@@ -149,7 +151,11 @@ def scopestmt(self, scope):
         self.scope = scope
         scopeexprs(self.exprs, scope)
         for sym in self.syms:
-            scope = scope.bind(sym, decl=self)
+            scope = scope.bind(sym, decl=self, def_=self)
+        return scope
+    elif isinstance(self, Impl):
+        self.scope = scope
+        scopeexpr(self.sym, scope)
         return scope
     elif isinstance(self, Return):
         self.scope = scope
@@ -172,9 +178,24 @@ def scandecl(self, scope):
 
         self.ctor = Fun(Sym('%s.ctor' % self.sym.name),
             [Sym(sym.name)
-                for stmt in self.stmts
+                for stmt in self.stmts if isinstance(stmt, Def)
                 for sym in stmt.syms], [])
         scope = scandecl(self.ctor, scope)
+        return scope
+    elif isinstance(self, Interface):
+        self.scope = scope
+        scope = scope.bind(self.sym, local=False, decl=self, impl=self)
+
+        nscope = scope
+        for stmt in self.stmts:
+            nscope = scandecl(stmt, nscope)
+
+        # TODO need better method of code injection
+        self.funs = [Fun(Sym(sym.name), [], []) 
+            for stmt in self.stmts
+            for sym in stmt.syms]
+        for fun in self.funs:
+            scope = scandecl(fun, scope)
         return scope
     elif isinstance(self, Extern):
         self.scope = scope
@@ -187,7 +208,7 @@ def scandecl(self, scope):
     elif isinstance(self, Def):
         self.scope = scope
         for sym in self.syms:
-            scope = scope.bind(sym, local=False, decl=self)
+            scope = scope.bind(sym, local=False, decl=self, def_=self)
         return scope
     else:
         raise NotImplementedError("scopedecl not implemented for %r" % self)
@@ -212,6 +233,16 @@ def scopedecl(self, scope):
 
         scope = scopedecl(self.ctor, scope)
         return scope
+    elif isinstance(self, Interface):
+        nscope = scope
+        for stmt in self.stmts:
+            nscope = scopestmt(stmt, nscope)
+
+        for fun in self.funs:
+            fun.sym.scope = scope # Hm
+            scope = scopedecl(fun, scope)
+
+        return scope
     elif isinstance(self, Extern):
         scopeexprs(self.exprs, scope)
         return scope
@@ -231,13 +262,5 @@ def scopecheck(ptree):
 
     for decl in ptree:
         scope = scopedecl(decl, scope)
-
-    # This mess just consolidates any overloaded attributes
- #    for sym in scope:
- #        for attr in ['decl', 'impl']:
- #            if hasattr(sym, attr):
- #                if not hasattr(scope[sym], '%ss' % attr):
- #                    setattr(scope[sym], '%ss' % attr, [])
- #                getattr(scope[sym], '%ss' % attr).append(getattr(sym, attr))
 
     return scope
