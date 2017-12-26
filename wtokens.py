@@ -76,3 +76,9 @@ class Sym:
             return rep
         else:
             return self
+
+    def expand(self):
+        if hasattr(self, 'value'):
+            return self.value, True
+        else:
+            return self, False

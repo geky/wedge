@@ -34,18 +34,43 @@ def typeexpect(self, expected, line=None):
                 (self, expected), line or self)
 
         return self
+    elif isinstance(self, InterfaceT):
+        if expected in self.impls:
+            return self
+        else:
+            for sym, type in self.funs:
+                # try to find implementation of expected functions
+                # TODO make this cleaner?
+                nsym = Sym(sym.name)
+                sym.scope.bind(nsym)
+                ntype = type.sub(self.sym, expected)
+                res = typeexpr(nsym, ntype)
+
+            self.impls.add(expected)
+            return self
+    elif isinstance(expected, InterfaceT):
+        if self in expected.impls:
+            return expected
+        else:
+            for sym, type in expected.funs:
+                # try to find implementation of expected functions
+                # TODO make this cleaner?
+                nsym = Sym(sym.name)
+                sym.scope.bind(nsym)
+                ntype = type.sub(expected.sym, self)
+                res = typeexpr(nsym, ntype)
+
+            expected.impls.add(self)
+            return expected
     else:
         raise TypeException("mismatched types %s and %s" %
             (self, expected), line or self)
 
 def typeselect(self, overloads, expected, line=None):
     assert len(overloads) > 0
+    original_overloads = overloads
 
-    if len(overloads) == 1:
-        sym, type = overloads[0]
-        type = typeexpect(type, expected, line)
-        return sym, type
-    else:
+    while True:
         options = []
         for sym, type in overloads:
             try:
@@ -53,17 +78,28 @@ def typeselect(self, overloads, expected, line=None):
                 options.append((sym, type))
             except TypeException:
                 pass
-
-        if len(options) == 0:
-            raise TypeException(
-                '\n'.join(["no valid overload for %r, %r" % (self, expected)] +
-                    ['%r' % type for _, type in overloads]), line or self)
+            
+        if len(options) == 1:
+            return options[0]
         elif len(options) > 1:
             raise TypeException(
                 '\n'.join(["ambiguous overload for %r, %r" % (self, expected)] +
                     ['%r' % type for _, type in options]), line or self)
-        else:
-            return options[0]
+
+        expanded = []
+        for sym, type in overloads:
+            ntype, x = type.expand()
+            if x:
+                expanded.append((sym, ntype))
+
+        if not expanded:
+            break
+
+        overloads = expanded
+
+    raise TypeException(
+        '\n'.join(["no valid overload for %r, %r" % (self, expected)] +
+            ['%r' % type for _, type in original_overloads]), line or self)
 
 def typeframe(self, expected=None):
     if isinstance(self, Call):
@@ -208,6 +244,8 @@ def typedecl(self):
 
         typedecl.active.remove(self.sym)
     elif isinstance(self, Type):
+        typedecl.active.add(self.sym)
+
         self.sym.type = TypeT()
         for stmt in self.stmts:
             typestmt(stmt, self)
@@ -216,7 +254,11 @@ def typedecl(self):
             for sym in stmt.syms
             for stmt in self.stmts if isinstance(stmt, Def)], [self.sym])
         typedecl(self.ctor)
+
+        typedecl.active.remove(self.sym)
     elif isinstance(self, Interface):
+        typedecl.active.add(self.sym)
+
         self.sym.type = TypeT()
         for stmt in self.stmts:
             typestmt(stmt, self)
@@ -232,6 +274,8 @@ def typedecl(self):
 
         self.sym.value = InterfaceT(self.sym,
             [(fun.sym, fun.sym.type) for fun in self.funs])
+
+        typedecl.active.remove(self.sym)
     elif isinstance(self, Extern):
         for sym, expr in zip(self.syms, self.exprs):
             typeexpr(expr, TypeT())

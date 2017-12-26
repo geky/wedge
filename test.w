@@ -1,18 +1,61 @@
-
+// steps for interface glory
+// 1. Allow passing type in interface into interface function
+//
+//    interface a
+//        def b = a -> int
+//    type c
+//        impl a
+//    fun main()
+//        b(c())
+//    // remember this comes second to def b = c -> int!
+//
+// 2. Infer interface if possible
+//
+//    interface a
+//        def b = a -> int
+//    def c = a -> int
+//    type d
+//        blah
+//    def b = d -> int
+//    fun main()
+//        c(d())
+//    // comes last
+//
+// 3. Infer implicit interfaces
+//    type a
+//        blah
+//    type b
+//        blah
+//    def c = a -> int
+//    def c = b -> int
+//    fun d(x)
+//        return c(x)
 
 extern putchar = int -> int
 
+interface gahe
+    def pgahc = gahe -> int
+
+type gaha
+    def blah = int
+
+type gahb
+    def blah = int
+
+def pgahc = gaha -> int
+fun pgahc(a)
+    return 1
+
+def pgahc = gahb -> int
+fun pgahc(b)
+    return 2
+
+def pgahd = gahe -> int
+fun pgahd(e)
+    return pgahc(e)
+
 interface hey
     def hi = hey -> int
-    def werk = hey -> int, int
-
-def werk = howdy -> int, int
-fun werk(a)
-    return 1,2
-
-def werk = hello -> int, int
-fun werk(a)
-    return 1,3
 
 type hello
     impl hey
@@ -29,6 +72,10 @@ fun hm()
 def what = hey -> int
 fun what(a)
     return hi(a)
+
+def trywhat = int -> int
+fun trywhat(a)
+    return what(a)
 
 def doit = hey -> int
 fun doit(a)

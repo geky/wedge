@@ -19,6 +19,9 @@ class IntT:
     def sub(self, sym, rep):
         return self
 
+    def expand(self):
+        return self, False
+
 class FunT:
     def __init__(self, args, rets):
         self.args = args
@@ -46,6 +49,19 @@ class FunT:
             [arg.sub(sym, rep) for arg in self.args],
             [ret.sub(sym, rep) for ret in self.rets])
 
+    def expand(self):
+        args, rets, expanded = [], [], False
+        for arg in self.args:
+            a, x = arg.expand()
+            args.append(a)
+            expanded = expanded or x
+        for ret in self.rets:
+            r, x = ret.expand()
+            rets.append(r)
+            expanded = expanded or x
+            
+        return FunT(args, rets), expanded
+
 class InterfaceT:
     def __init__(self, sym, funs, impls=set()):
         self.sym = sym
@@ -53,7 +69,8 @@ class InterfaceT:
         self.impls = impls
 
     def __repr__(self):
-        return 'InterfaceT(%r, %r, %r)' % (self.sym, self.funs, self.impls)
+        return 'InterfaceT(%r)' % self.sym
+        #return 'InterfaceT(%r, %r, %r)' % (self.sym, self.funs, self.impls)
 
     def __eq__(self, other):
         return (
@@ -70,6 +87,9 @@ class InterfaceT:
         return InterfaceT(self.sym,
             [(sym, type.sub(sym, rep)) for sym, type in self.funs],
             self.impls)
+
+    def expand(self):
+        return self, False
 
 #class StructT:
 #    def __init__(self, syms, types):
@@ -99,3 +119,6 @@ class TypeT:
 
     def sub(self, sym, rep):
         return self
+
+    def expand(self):
+        return self, False
