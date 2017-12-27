@@ -29,6 +29,8 @@ def mangletype(self):
             ''.join(mangletype(ret) for ret in self.rets))
     elif isinstance(self, TypeT):
         return 't'
+    elif isinstance(self, InterfaceT):
+        return mangletype(self.sym) # TODO hm
     elif isinstance(self, Sym):
         return '%d%s' % (len(self.name), self.name)
     else:

@@ -1,3 +1,4 @@
+from wtokens import Sym
 
 # Types
 class IntT:
@@ -63,13 +64,21 @@ class FunT:
         return FunT(args, rets), expanded
 
 class InterfaceT:
-    def __init__(self, sym, funs, impls=set()):
+    def __init__(self, sym, funs=[], impls=set()):
+        if isinstance(sym, list):
+            impls = funs
+            funs = sym
+            sym = InterfaceT.getiid()
+
         self.sym = sym
         self.funs = funs
         self.impls = impls
 
     def __repr__(self):
-        return 'InterfaceT(%r)' % self.sym
+        if self.sym.name.startswith('.'):
+            return 'InterfaceT(%r)' % self.funs
+        else:
+            return 'InterfaceT(%r)' % self.sym
         #return 'InterfaceT(%r, %r, %r)' % (self.sym, self.funs, self.impls)
 
     def __eq__(self, other):
@@ -90,6 +99,12 @@ class InterfaceT:
 
     def expand(self):
         return self, False
+
+    @classmethod
+    def getiid(cls):
+        id = getattr(cls, 'id', 0)
+        cls.id = id + 1
+        return Sym('.i%d' % id)
 
 #class StructT:
 #    def __init__(self, syms, types):
@@ -122,3 +137,4 @@ class TypeT:
 
     def expand(self):
         return self, False
+

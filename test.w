@@ -33,8 +33,8 @@
 
 extern putchar = int -> int
 
-interface gahe
-    def pgahc = gahe -> int
+//interface gahe
+//    def pgahc = gahe -> int
 
 type gaha
     def blah = int
@@ -50,7 +50,15 @@ def pgahc = gahb -> int
 fun pgahc(b)
     return 2
 
-def pgahd = gahe -> int
+def pgahf = gaha -> int
+fun pgahf(a)
+    return 3
+
+def pgahf = gahb -> int
+fun pgahf(b)
+    return 4
+
+//def pgahd = gahe -> int
 fun pgahd(e)
     return pgahc(e)
 

@@ -66,6 +66,37 @@ def typeexpect(self, expected, line=None):
         raise TypeException("mismatched types %s and %s" %
             (self, expected), line or self)
 
+def typeinterfy(overloads, line=None):
+    assert len(overloads) > 1 and all(sym == overloads[0][0] for sym, _ in overloads[1:])
+    if not (all(isinstance(fun, FunT) for _, fun in overloads) and
+            all(len(fun.args) == len(overloads[0][1].args) for _, fun in overloads[1:]) and
+            all(fun.rets == overloads[0][1].rets for _, fun in overloads[1:])):
+        raise TypeException(
+            '\n'.join(["not interface compatible"] +
+                ["%r" % type for _, type in overloads]), line)
+
+    ifaces = []
+    impls = []
+    args = []
+    for argset in zip(*[fun.args for _, fun in overloads]):
+        if not all(arg == argset[0] for arg in argset[1:]):
+            sym = InterfaceT.getiid()
+            ifaces.append(sym)
+            impls.append(set(argset))
+            args.append(sym)
+        else:
+            args.append(arg)
+
+    if len(ifaces) != 1:
+        raise TypeException(
+            '\n'.join(["not interface compatible"] +
+                ["%r" % type for _, type in overloads]), line)
+
+    # TODO make scope work out? needs code injection
+    fun = FunT(args, overloads[0][1].rets)
+    iface = InterfaceT(ifaces[0], [fun], impls[0])
+    return overloads[0][0], fun
+
 def typeselect(self, overloads, expected, line=None):
     assert len(overloads) > 0
     original_overloads = overloads
@@ -82,9 +113,12 @@ def typeselect(self, overloads, expected, line=None):
         if len(options) == 1:
             return options[0]
         elif len(options) > 1:
-            raise TypeException(
-                '\n'.join(["ambiguous overload for %r, %r" % (self, expected)] +
-                    ['%r' % type for _, type in options]), line or self)
+            try:
+                return typeinterfy(options)
+            except TypeException:
+                raise TypeException(
+                    '\n'.join(["ambiguous overload for %r, %r" % (self, expected)] +
+                        ['%r' % type for _, type in options]), line or self)
 
         expanded = []
         for sym, type in overloads:
