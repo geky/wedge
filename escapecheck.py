@@ -8,7 +8,7 @@ def escapeexpr(self, home):
         if home:
             self.home = home
 
-        self.sym = escapeexpr(self.sym, None)
+        self.callee = escapeexpr(self.callee, None)
         self.exprs = [escapeexpr(expr, None) for expr in self.exprs]
         return self
     elif isinstance(self, Num):
@@ -35,7 +35,7 @@ def escapeexprs(self, homes):
             self[0].homes = homes
             self[0].home = homes[0]
 
-        self[0].sym = escapeexpr(self[0].sym, None)
+        self[0].callee = escapeexpr(self[0].callee, None)
         self[0].exprs = [escapeexpr(expr, None) for expr in self[0].exprs]
         return self
     else:
@@ -44,7 +44,7 @@ def escapeexprs(self, homes):
 
 def escapestmt(self):
     if isinstance(self, Let):
-        self.exprs = escapeexprs(self.exprs, self.syms)
+        self.exprs = escapeexprs(self.exprs, self.targets)
         return self
     elif isinstance(self, Def):
         return self
@@ -61,6 +61,8 @@ def escapedecl(self):
     if isinstance(self, Fun):
         self.stmts = [escapestmt(stmt)
             for stmt in self.stmts]
+    elif isinstance(self, RawFunImpl):
+        pass
     elif isinstance(self, Extern):
         pass
     elif isinstance(self, Export):
@@ -76,4 +78,5 @@ def escapedecl(self):
 
 def escapecheck(scope):
     for sym in scope:
-        escapedecl(sym.decl)
+        for decl in sym.decls:
+            escapedecl(decl)

@@ -1,5 +1,6 @@
 from wtokens import Sym
 
+
 # Types
 class IntT:
     def __init__(self):
@@ -22,6 +23,15 @@ class IntT:
 
     def expand(self):
         return self, False
+
+    def eval(self):
+        return self
+
+    def itersyms(self):
+        yield from []
+
+    def iterexprs(self):
+        yield self
 
 class FunT:
     def __init__(self, args, rets):
@@ -63,8 +73,24 @@ class FunT:
             
         return FunT(args, rets), expanded
 
+    def eval(self):
+        return self
+
+    def itersyms(self):
+        for arg in self.args:
+            yield from arg.itersyms()
+        for ret in self.rets:
+            yield from ret.itersyms()
+
+    def iterexprs(self):
+        for arg in self.args:
+            yield from arg.iterexprs()
+        for ret in self.rets:
+            yield from ret.iterexprs()
+        yield self
+
 class InterfaceT:
-    def __init__(self, sym, funs=[], impls=set()):
+    def __init__(self, sym, funs=set(), impls=set()):
         if isinstance(sym, list):
             impls = funs
             funs = sym
@@ -72,14 +98,10 @@ class InterfaceT:
 
         self.sym = sym
         self.funs = funs
-        self.impls = impls
+        self.impls = impls or set()
 
     def __repr__(self):
-        if self.sym.name.startswith('.'):
-            return 'InterfaceT(%r)' % self.funs
-        else:
-            return 'InterfaceT(%r)' % self.sym
-        #return 'InterfaceT(%r, %r, %r)' % (self.sym, self.funs, self.impls)
+        return 'InterfaceT(%r, %r)' % (str(self.sym), self.funs)
 
     def __eq__(self, other):
         return (
@@ -94,7 +116,7 @@ class InterfaceT:
 
     def sub(self, sym, rep):
         return InterfaceT(self.sym,
-            [(sym, type.sub(sym, rep)) for sym, type in self.funs],
+            {(sym, type.sub(sym, rep)) for sym, type in self.funs},
             self.impls)
 
     def expand(self):
@@ -105,6 +127,15 @@ class InterfaceT:
         id = getattr(cls, 'id', 0)
         cls.id = id + 1
         return Sym('.i%d' % id)
+
+    def eval(self):
+        return self
+
+    def itersyms(self):
+        yield from [] # TODO?
+
+    def iterexprs(self):
+        yield self
 
 #class StructT:
 #    def __init__(self, syms, types):
@@ -137,4 +168,14 @@ class TypeT:
 
     def expand(self):
         return self, False
+
+    def eval(self):
+        return self
+
+    def itersyms(self):
+        yield from []
+
+    def iterexprs(self):
+        yield self
+
 

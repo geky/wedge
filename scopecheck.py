@@ -1,87 +1,84 @@
 from wsyntax import *
 from wtypes import *
 from util import CompileException
+from itertools import chain
 
 class ScopeException(CompileException):
     pass
 
-class Scope:
-    def __init__(self, sym=None, tail=None):
-        assert sym is None or isinstance(sym, Sym)
-        assert tail is None or isinstance(tail, Scope)
-        self.tail = tail
+class Var:
+    def __init__(self, sym, **kwargs):
+        if not isinstance(sym, Sym):
+            sym = Sym(sym)
+
+        if hasattr(sym, 'line'):
+            self.line = sym.line
+
         self.sym = sym
+        self.decls = []
+
+        self.update(kwargs)
+
+    def __repr__(self):
+        return 'Var(%s)' % ', '.join(chain([repr(str(self.sym))],
+            ('%s=%r' % (k, v)
+                for k, v in self.__dict__.items()
+                if k != 'sym')))
+
+    def update(self, kwargs):
+        if 'decl' in kwargs:
+            self.decls.append(kwargs['decl'])
+            del kwargs['decl']
+
+        self.__dict__.update(kwargs)
+
+class GlobalScope:
+    def __init__(self):
+        self.table = []
 
     def bind(self, sym, **kwargs):
-        if isinstance(sym, str):
+        if isinstance(sym, Var):
+            assert isinstance(sym.sym, Sym)
+            sym.update(kwargs)
+            sym.local = False
+            sym.sym.var = sym
+            sym.sym.scope = self
+            self.table.append(sym)
+            return
+
+        if not isinstance(sym, Sym):
             sym = Sym(sym)
-        assert isinstance(sym, Sym)
 
+        for var in reversed(self.table):
+            if sym == var.sym:
+                if hasattr(var, 'impl'):
+                    break
+
+                var.update(kwargs)
+                sym.var = var
+                sym.scope = self
+                return self
+
+        sym.var = Var(sym, local=False, **kwargs)
         sym.scope = self
-        sym.constraints = []
-        for k, v in kwargs.items():
-            setattr(sym, k, v)
-        sym.nscope = Scope(sym, self)
-        return sym.nscope
-
-    def bindall(self, syms):
-        for sym in syms:
-            if isinstance(sym, tuple):
-                sym, attrs = sym
-            else:
-                sym, attrs = sym, {}
-
-            self = self.bind(sym, **attrs)
-
+        self.table.append(sym.var)
         return self
 
-    def getattr(self, sym, attr):
-        if isinstance(sym, str):
+    def getoverloads(self, sym):
+        if not isinstance(sym, Sym):
             sym = Sym(sym)
 
-        while self:
-            if sym == self.sym and attr in self.sym.__dict__:
-                return self.sym.__dict__[attr]
-            if sym == self.sym and 'def_' in self.sym.__dict__:
-                break
-            self = self.tail
-
-        raise AttributeError("%r has no attribute %r" % (sym, attr))
-
-    def getattrs(self, sym, attr):
-        if isinstance(sym, str):
-            sym = Sym(sym)
-
-        attrs = []
-        while self:
-            if sym == self.sym and attr in self.sym.__dict__:
-                attrs.append(self.sym.__dict__[attr])
-            self = self.tail
-
-        return reversed(attrs)
-
-    def filter(self, sym, attr):
-        if isinstance(sym, str):
-            sym = Sym(sym)
-
-        attrs = []
-        while self:
-            if sym == self.sym and attr in self.sym.__dict__:
-                attrs.append(self.sym)
-            self = self.tail
-
-        return reversed(attrs)
+        return [var for var in self.table if var.sym == sym]
 
     def __getitem__(self, sym):
-        if isinstance(sym, str):
-            sym = Sym(sym)
+        overloads = self.getoverloads(sym)
 
-        while self:
-            if sym == self.sym:
-                return self.sym
-            self = self.tail
-        else:
+        if len(overloads) == 0:
             raise KeyError(sym)
+        elif len(overloads) == 1:
+            return overloads[0]
+        else:
+            return overloads
 
     def __contains__(self, sym):
         try:
@@ -92,47 +89,225 @@ class Scope:
             return True
 
     def __bool__(self):
-        return not (self.sym is None and self.tail is None)
+        return len(self.table) > 0
 
     def __iter__(self):
-        all = []
-        while self:
-            all.append(self.sym)
-            self = self.tail
-        return reversed(all)
+        yield from self.table
+
+    def itervalues(self):
+        for var in self:
+            if hasattr(var, 'value'):
+                yield var.value
+
+    def iterdecls(self):
+        for var in self:
+            yield from var.decls
+
+    def iterexprs(self):
+        for decl in self.iterdecls():
+            yield from decl.iterexprs()
+
+    def itersyms(self):
+        for decl in self.iterdecls():
+            yield from decl.itersyms()
+
+    def globals(self):
+        return self
+
+    def locals(self):
+        return self
 
     def __repr__(self):
-        return 'Scope([%s])' % ', '.join(map(repr, self))
+        return 'GlobalScope({%s})' % ', '.join(
+            repr(str(var.sym)) for var in self)
 
-    def until(self, scope):
-        all = []
-        while self and self is not scope:
-            all.append(self.sym)
-            self = self.tail
-        return reversed(all)
+class LocalScope:
+    def __init__(self, tail=None):
+        self.tail = tail
+        self.var = None # Indicates bounds of current scope
 
+    def bind(self, sym, **kwargs):
+        if isinstance(sym, Var):
+            assert isinstance(sym.sym, Sym)
+            sym.update(kwargs)
+            sym.local = True
+            sym.sym.var = sym
+            sym.sym.scope = self
+            scope = LocalScope(self)
+            scope.var = sym
+            return scope
+
+        if not isinstance(sym, Sym):
+            sym = Sym(sym)
+
+        scope = self
+        while scope.var is not None:
+            if scope.var.sym == sym:
+                if hasattr(scope.var, 'impl'):
+                    break
+
+                scope.var.update(kwargs)
+                sym.var = scope.var
+                sym.scope = self
+                return self
+
+            scope = scope.tail
+
+        scope = LocalScope(self)
+        scope.var = Var(sym, local=True, **kwargs)
+        sym.var = scope.var
+        sym.scope = self
+        return scope
+
+    def getoverloads(self, sym):
+        if not isinstance(sym, Sym):
+            sym = Sym(sym)
+
+        if self.var is not None and self.var.sym == sym:
+            return [self.var]
+
+        return self.tail.getoverloads(sym)
+
+    def __getitem__(self, sym):
+        overloads = self.getoverloads(sym)
+
+        if len(overloads) == 0:
+            raise KeyError(sym)
+        elif len(overloads) == 1:
+            return overloads[0]
+        else:
+            return overloads
+
+    def __contains__(self, sym):
+        try:
+            self[sym]
+        except KeyError:
+            return False
+        else:
+            return True
+
+    def __bool__(self):
+        return self.var is not None or bool(self.tail)
+
+    def __iter__(self):
+        if self.tail:
+            yield from self.tail
+
+        if self.var:
+            yield self.var
+
+    def itervalues(self):
+        for var in self:
+            if hasattr(var, 'value'):
+                yield var.value
+
+    def iterdecls(self):
+        for var in self:
+            yield from var.decls
+
+    def iterexprs(self):
+        for decl in self.iterdecls():
+            yield from decl.iterexprs()
+
+    def itersyms(self):
+        for decl in self.iterdecls():
+            yield from decl.itersyms()
+
+    def globals(self):
+        return self.tail.globals()
+
+    def locals(self):
+        return LocalScopeSlice(self)
+
+    def __repr__(self):
+        return 'LocalScope({%s})' % ', '.join(
+            repr(str(var.sym)) for var in self)
+
+class LocalScopeSlice:
+    def __init__(self, scope=None):
+        self.scope = scope
+
+    def getoverloads(self, sym):
+        if not isinstance(sym, Sym):
+            sym = Sym(sym)
+
+        scope = self.scope
+        while scope.var is not None:
+            if scope.var.name == sym.name:
+                return [scope.var]
+            scope = scope.tail
+        else:
+            return []
+
+    def __iter__(self):
+        scope = self.scope
+        vars = []
+        while scope.var is not None:
+            vars.append(scope.var)
+            scope = scope.tail
+        return reversed(vars)
+
+    def __getitem__(self, sym):
+        overloads = self.getoverloads(sym)
+
+        if len(overloads) == 0:
+            raise KeyError(sym)
+        elif len(overloads) == 1:
+            return overloads[0]
+        else:
+            return overloads
+
+    def __contains__(self, sym):
+        try:
+            self[sym]
+        except KeyError:
+            return False
+        else:
+            return True
+
+    def __bool__(self):
+        return bool(self.scope)
+
+    def iterdecls(self):
+        for var in self:
+            yield from var.decls
+
+    def iterexprs(self):
+        for decl in self.iterdecls():
+            yield from decl.iterexprs()
+
+    def itersyms(self):
+        for decl in self.iterdecls():
+            yield from decl.itersyms()
+
+    def __repr__(self):
+        return 'LocalScopeSlice({%s})' % ', '.join(
+            repr(str(var.sym)) for var in self)
+
+
+# scoping rules
 def scopeexpr(self, scope):
     if isinstance(self, Call):
         self.scope = scope
-        scopeexpr(self.sym, scope)
+        scopeexpr(self.callee, scope)
         for e in self.exprs:
             scopeexpr(e, scope)
-        return scope
     elif isinstance(self, Num):
-        pass
+        self.scope = scope
     elif isinstance(self, Str):
-        pass
+        self.scope = scope
     elif isinstance(self, IntT):
-        pass
+        self.scope = scope
     elif isinstance(self, FunT):
+        self.scope = scope
         for arg in self.args:
             scopeexpr(arg, scope)
         for ret in self.rets:
             scopeexpr(ret, scope)
     elif isinstance(self, Sym):
-        if self not in scope or not hasattr(scope[self], 'decl'):
-            raise ScopeException("Symbol not in scope %s" % self, self)
         self.scope = scope
+        if self not in scope:
+            raise ScopeException("Symbol not in scope %r\n%r" % (self, self.scope), self)
     else:
         raise NotImplementedError("scopeexpr not implemented for %r" % self)
 
@@ -142,19 +317,16 @@ def scopeexprs(selfs, scope):
 
 def scopestmt(self, scope):
     if isinstance(self, Let):
-        self.scope = scope
         scopeexprs(self.exprs, scope)
-        for sym in self.syms:
+        for sym in self.targets:
             scope = scope.bind(sym, decl=self, impl=self)
         return scope
     elif isinstance(self, Def):
-        self.scope = scope
         scopeexprs(self.exprs, scope)
-        for sym in self.syms:
-            scope = scope.bind(sym, decl=self, def_=self)
+        for sym in self.targets:
+            scope = scope.bind(sym, decl=self)
         return scope
     elif isinstance(self, Impl):
-        self.scope = scope
         scopeexpr(self.sym, scope)
         return scope
     elif isinstance(self, Return):
@@ -162,105 +334,107 @@ def scopestmt(self, scope):
         scopeexprs(self.exprs, scope)
         return scope
     elif isinstance(self, Expr):
-        self.scope = scope
         scopeexprs(self.exprs, scope)
         return scope
     else:
         raise NotImplementedError("scopestmt not implemented for %r" % self)
 
+def scanpseudostmt(self, scope):
+    if isinstance(self, Def):
+        for sym in self.targets:
+            scope = scope.bind(sym, decl=self)
+        return scope
+    else:
+        raise NotImplementedError("scopepseudostmt not implemented for %r" % self)
+
+def scopepseudostmt(self, scope):
+    if isinstance(self, Def):
+        scopeexprs(self.exprs, scope)
+    else:
+        raise NotImplementedError("scopepseudostmt not implemented for %r" % self)
+
+
 def scandecl(self, scope):
     if isinstance(self, Fun):
         self.scope = scope
-        return scope.bind(self.sym, local=False, decl=self, impl=self)
+        scope.bind(self.sym, decl=self, impl=self)
     elif isinstance(self, Type):
         self.scope = scope
-        scope = scope.bind(self.sym, local=False, decl=self, impl=self)
+        scope.bind(self.sym, decl=self, impl=self)
 
-        self.ctor = Fun(Sym('%s.ctor' % self.sym.name),
-            [Sym(sym.name)
-                for stmt in self.stmts if isinstance(stmt, Def)
-                for sym in stmt.syms], [])
-        scope = scandecl(self.ctor, scope)
-        return scope
+        self.ctor = Sym(self.sym)
+        scope.bind(self.ctor, decl=self, line=self.line,
+            type=FunT(None, [self.sym]),
+            impl=RawFunImpl([
+                "; TODO constructor function",
+                "ret i32 0",
+            ]),
+        )
     elif isinstance(self, Interface):
         self.scope = scope
-        scope = scope.bind(self.sym, local=False, decl=self, impl=self)
+        scope.bind(self.sym, decl=self)
 
-        nscope = scope
+        nscope = LocalScope(scope)
         for stmt in self.stmts:
-            nscope = scandecl(stmt, nscope)
+            nscope = scanpseudostmt(stmt, nscope)
 
-        # TODO need better method of code injection
-        self.funs = [Fun(Sym(sym.name), [], []) 
-            for stmt in self.stmts
-            for sym in stmt.syms]
-        for fun in self.funs:
-            scope = scandecl(fun, scope)
-        return scope
+        self.nscope = nscope
+        for var in self.nscope.locals():
+            scope.bind(var, impl=self)
     elif isinstance(self, Extern):
         self.scope = scope
-        for sym in self.syms:   
-            scope = scope.bind(sym, local=False, decl=self, impl=self, extern=True)
+        for sym in self.targets:   
+            scope.bind(sym, decl=self, impl=self, extern=True)
         return scope
     elif isinstance(self, Export):
         self.scope = scope
-        return scope.bind(self.sym, local=False, decl=self, export=True)
+        scope.bind(self.sym, decl=self, export=True)
     elif isinstance(self, Def):
         self.scope = scope
-        for sym in self.syms:
-            scope = scope.bind(sym, local=False, decl=self, def_=self)
-        return scope
+        for sym in self.targets:
+            scope.bind(sym, decl=self)
     else:
-        raise NotImplementedError("scopedecl not implemented for %r" % self)
+        raise NotImplementedError("scandecl not implemented for %r" % self)
 
 def scopedecl(self, scope):
     if isinstance(self, Fun):
-        nscope = scope
-        self.ret = Sym('return')
-        nscope = nscope.bind(self.ret)
+        nscope = LocalScope(scope)
+
+        self.rets = Sym('.rets')
+        nscope = nscope.bind(self.rets)
 
         for arg in self.args:
-            nscope = nscope.bind(arg, decl=self, impl=self)
+            nscope = nscope.bind(arg)
 
         for stmt in self.stmts:
             nscope = scopestmt(stmt, nscope)
-
-        return scope
     elif isinstance(self, Type):
         nscope = scope
         for stmt in self.stmts:
             nscope = scopestmt(stmt, nscope)
-
-        scope = scopedecl(self.ctor, scope)
-        return scope
     elif isinstance(self, Interface):
-        nscope = scope
         for stmt in self.stmts:
-            nscope = scopestmt(stmt, nscope)
-
-        for fun in self.funs:
-            fun.sym.scope = scope # Hm
-            scope = scopedecl(fun, scope)
-
-        return scope
+            scopepseudostmt(stmt, self.nscope)
     elif isinstance(self, Extern):
         scopeexprs(self.exprs, scope)
-        return scope
     elif isinstance(self, Export):
-        return scope
+        pass
     elif isinstance(self, Def):
         scopeexprs(self.exprs, scope)
-        return scope
     else:
         raise NotImplementedError("scopedecl not implemented for %r" % self)
 
 def scopecheck(ptree):
-    scope = Scope()
+    scope = GlobalScope()
 
     for decl in ptree:
-        scope = scandecl(decl, scope)
+        scandecl(decl, scope)
 
     for decl in ptree:
-        scope = scopedecl(decl, scope)
+        scopedecl(decl, scope)
+
+    for decl in ptree:
+        for expr in decl.iterexprs():
+            assert expr.scope
 
     return scope

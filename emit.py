@@ -37,17 +37,18 @@ def mangletype(self):
         raise NotImplementedError("mangletype not implemented for %r" % self)
 
 def mangle(self):
-    if getattr(self, 'local', True):
+    var = getattr(self, 'var', None) or self.scope[self]
+    if getattr(var, 'local', True):
         i = 0
         for sym in chain(self.scope, [self]):
             if sym == self and 'impl' in sym.__dict__:
                 i += 1
         return '%%v%s.%d' % (self.name, i)
     else:
-        if hasattr(self, 'export') or hasattr(self, 'extern'):
-            return '@%s' % self.name
+        if hasattr(var, 'export') or hasattr(var, 'extern'):
+            return '@%s' % var.sym
         else:
-            return '@%s.%s' % (self.name, mangletype(self.type))
+            return '@%s.%s' % (var.sym, mangletype(var.type))
 
 def emittype(self):
     if isinstance(self, IntT):
@@ -58,7 +59,7 @@ def emittype(self):
 def emitexpr(self, e):
     if isinstance(self, Call):
         args = []
-        callee = mangle(self.sym)
+        callee = mangle(self.callee)
 
         for expr in self.exprs:
             args.append('i32 %s' % emitexpr(expr, e))
@@ -104,7 +105,7 @@ def emitexprs(self, e):
 def emitstmt(self, e):
     if isinstance(self, Let):
         ids = emitexprs(self.exprs, e)
-        for sym, id in zip(self.syms, ids):
+        for sym, id in zip(self.targets, ids):
             e.allocs.append([
                 '%s = alloca i32, align 4' % mangle(sym)])
             e.locals.append([
@@ -132,21 +133,21 @@ def emitstmt(self, e):
     else:
         raise NotImplementedError("emitstmt not implemented for %r" % self)
 
-def emitdecl(self, e):
-    if isinstance(self, Fun):
+def emitvar(self, e):
+    if isinstance(self.impl, Fun):
         args = []
-        for i, arg in enumerate(self.args):
+        for i, arg in enumerate(self.impl.args):
             args.append('i32 %%a%d' % i)
             e.allocs.append([
                 '%s = alloca i32, align 4' % mangle(arg)])
             e.locals.append([
                 'store i32 %%a%d, i32* %s, align 4' % (i, mangle(arg))])
 
-        if len(self.sym.type.rets) > 1:
+        if len(self.type.rets) > 1:
             rtype = '{%s}' % ', '.join('i32' for _ in self.sym.type.rets)
             args.append('%s* %%r' % rtype)
 
-        for s in self.stmts:
+        for s in self.impl.stmts:
             emitstmt(s, e)
 
         allocs = ['    '+a for a in sum(e.allocs, [])]
@@ -160,22 +161,24 @@ def emitdecl(self, e):
             '    ret i32 0',
             '}'
         ])
-    elif isinstance(self, Def):
-        pass
-    elif isinstance(self, Export):
-        pass
-    elif isinstance(self, Extern):
-        for sym in self.syms:
-            e.globals.append(['declare i32 %s(i32)' % mangle(sym)])
+    elif isinstance(self.impl, Extern):
+        for sym in self.impl.targets:
+            e.globals.append(['declare i32 %s(i32)' % mangle(self.sym)])
+    elif isinstance(self.impl, RawFunImpl):
+        args = ['i32 %%a%d' % i for i, _ in enumerate(self.type.args)]
+        e.globals.append([
+            'define i32 %s(%s) {' % (mangle(self.sym), ','.join(args)),
+            ] + ['    '+i for i in self.impl.ir] + [
+            '}'
+        ])
     else:
-        raise NotImplementedError("emitdecl not implemented for %r" % self)
+        raise NotImplementedError("emitvar not implemented for %r" % self.impl)
 
-def emit(ptree):
+def emit(deps):
     e = Emitter()
 
-    for sym in ptree:
-        if hasattr(sym, 'impl'):
-            emitdecl(sym.impl, e)
+    for var in deps:
+        emitvar(var, e)
 
     assert len(e.locals) == 0
 

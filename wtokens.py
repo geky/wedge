@@ -1,4 +1,7 @@
+from util import CompileException
 
+class EvalException(CompileException):
+    pass
 
 # Literal numbers and strings
 class Num:
@@ -15,6 +18,12 @@ class Num:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def itersyms(self):
+        yield from []
+
+    def iterexprs(self):
+        yield self
+
 class Str:
     def __init__(self, v):
         assert isinstance(v, str)
@@ -29,17 +38,29 @@ class Str:
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def itersyms(self):
+        yield from []
+
+    def iterexprs(self):
+        yield self
+
 # General symbols (not keywords!)
 class Sym:
     def __init__(self, name):
+        if isinstance(name, Sym):
+            name = name.name
+
         assert isinstance(name, str)
         self.name = name
 
     def __repr__(self):
         return 'Sym(%r)' % self.name
 
+    def __str__(self):
+        return self.name
+
     def __eq__(self, other):
-        return isinstance(other, Sym) and self.name == other.name
+        return (isinstance(other, Sym) and self.name == other.name)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -47,29 +68,11 @@ class Sym:
     def __hash__(self):
         return hash(self.name)
 
-    def __getattr__(self, attr):
-        if attr != 'scope':
-            if hasattr(self, 'scope'):
-                if 'def_' not in self.__dict__:
-                    try:
-                        return self.scope.getattr(self, attr)
-                    except AttributeError:
-                        pass
+    def itersyms(self):
+        yield self
 
-                if attr.endswith('s'):
-                    if getattr(self, 'local', True):
-                        try:
-                            return [getattr(self, attr[:-1])]
-                        except AttributeError:
-                            pass
-                    else:
-                        attrs = list(self.scope.getattrs(self, attr[:-1]))
-                        if attr[:-1] in self.__dict__:
-                            attrs.append(self.__dict__[attr[:-1]])
-                        if attrs:
-                            return attrs
-                        
-        raise AttributeError("%r has no attribute %r" % (self, attr))
+    def iterexprs(self):
+        yield self
 
     def sub(self, sym, rep):
         if sym == self:
@@ -78,7 +81,14 @@ class Sym:
             return self
 
     def expand(self):
-        if hasattr(self, 'value'):
-            return self.value, True
+        if hasattr(self, 'var') and hasattr(self.var, 'value'):
+            return self.var.value, True
         else:
             return self, False
+
+    def eval(self):
+        if hasattr(self, 'var') and hasattr(self.var, 'value'):
+            return self.var.value
+        else:
+            raise EvalException("not able to eval %r" % self, self)
+
