@@ -358,11 +358,11 @@ def scandecl(self, scope):
     if isinstance(self, Fun):
         self.scope = scope
         scope.bind(self.sym, decl=self, impl=self)
-    elif isinstance(self, Type):
+    elif isinstance(self, Struct):
         self.scope = scope
         scope.bind(self.sym, decl=self, impl=self)
 
-        self.ctor = Sym(self.sym)
+        self.ctor = Sym('.ctor.%s' % self.sym)
         scope.bind(self.ctor, decl=self, line=self.line,
             type=FunT(None, [self.sym]),
             impl=RawFunImpl([
@@ -408,8 +408,12 @@ def scopedecl(self, scope):
 
         for stmt in self.stmts:
             nscope = scopestmt(stmt, nscope)
-    elif isinstance(self, Type):
-        nscope = scope
+    elif isinstance(self, Struct):
+        nscope = LocalScope(scope)
+
+        for arg in self.args:
+            nscope = nscope.bind(arg)
+
         for stmt in self.stmts:
             nscope = scopestmt(stmt, nscope)
     elif isinstance(self, Interface):

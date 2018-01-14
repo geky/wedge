@@ -1,0 +1,88 @@
+- code: |
+    def a = void -> int
+    fun a()
+        return 3
+
+    def b = void -> int
+    fun b()
+        return a()
+
+- code: |
+    def b = void -> int
+    fun b()
+        return a()
+
+    def a = void -> int
+    fun a()
+        return 3
+
+- code: |
+    def b = void -> int
+    fun b()
+        return a()
+  error: ScopeException
+
+- code: |
+    fun int_copy(x) { return 0 } // TODO rm me
+    
+    def a = void -> int
+    fun a()
+        let x = 3
+        return x
+
+    def b = void -> int
+    fun b()
+        return a()
+
+- code: |
+    fun int_copy(x) { return 0 } // TODO rm me
+
+    def a = void -> int
+    fun a()
+        let x = 3
+        return x
+
+    def b = void -> int
+    fun b()
+        return x
+  error: ScopeException
+
+- code: |
+    fun int_copy(x) { return 0 } // TODO rm me
+
+    def a = void -> int
+    fun a()
+        let x = 3
+        let x = 4
+        let x = 5
+        return x
+
+    def b = void -> int
+    fun b()
+        return a()
+
+- code: |
+    fun int_copy(x) { return 0 } // TODO rm me
+
+    def x = void -> int
+    fun x()
+        let x = 3
+        return x
+
+    def b = void -> int
+    fun b()
+        let x = 4
+        return x()
+  error: TypeException
+
+- code: |
+    fun int_copy(x) { return 0 } // TODO rm me
+
+    def x = void -> int
+    fun x()
+        let x = 3
+        return x
+
+    def b = void -> int
+    fun b()
+        return x()

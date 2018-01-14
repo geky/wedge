@@ -69,7 +69,7 @@ def escapedecl(self):
         pass
     elif isinstance(self, Def):
         pass
-    elif isinstance(self, Type):
+    elif isinstance(self, Struct):
         pass
     elif isinstance(self, Interface):
         pass

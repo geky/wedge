@@ -9,6 +9,7 @@ KEYWORDS = {
     "def",
     "fun",
     "type",
+    "struct",
     "interface",
     "impl",
     "return",

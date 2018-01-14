@@ -39,17 +39,18 @@ interface q
 interface u
     def v = u -> int
 
-type a
+struct a
     impl q
     def x = int
 
-type b
+struct b
     impl q
     def x = int
 
-type c
+struct c(a)
     impl q
     def x = int
+    def y = int
 
 def d = int -> int
 fun d(x)
@@ -77,9 +78,9 @@ export main
 def main = void -> int
 fun main()
     putchar(f(0))
-    putchar(f(a(0)))
-    putchar(f(b(0)))
-    putchar(f(c(0)))
+    putchar(f(a{0}))
+    putchar(f(b{0}))
+    putchar(f(c{0,0}))
     return 0
 
 ////interface gahe

@@ -26,5 +26,16 @@
 
     def a = t -> t
     fun a(x)
-        return t(0)
+        return t{0}
+
+- code: |
+    type t {}
+    type u
+        def x = int
+        def y = int
+        def z = int
+
+    def a = t -> t, u
+    fun a(x)
+        return t{}, u{1,2,3}
 

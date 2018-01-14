@@ -65,6 +65,24 @@ class RawFunImpl:
     def iterexprs(self):
         yield self
 
+class Struct:
+    def __init__(self, sym=None, args=[], stmts=[]):
+        assert isinstance(sym, Sym)
+        self.sym = sym
+        self.args = args
+        self.stmts = stmts
+
+    def __repr__(self):
+        return 'Struct(%r, %r, %r)' % (self.sym, self.args, self.stmts)
+
+    def itersyms(self):
+        for stmt in self.stmts:
+            yield from stmt.itersyms()
+
+    def iterexprs(self):
+        for stmt in self.stmts:
+            yield from stmt.iterexprs()
+
 class Type:
     def __init__(self, sym=None, stmts=[]):
         assert isinstance(sym, Sym)
@@ -212,3 +230,4 @@ class Call:
             yield from expr.iterexprs()
 
         yield self
+

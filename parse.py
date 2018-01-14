@@ -35,19 +35,25 @@ def parsetype(p):
 
 def parseframe(p):
     if p.accept(Sym):
-        sym = p.match
+        expr = p.match
+    elif p.accept(Num):
+        expr = p.match
+    elif p.accept('int'):
+        expr = IntT()
+    else:
+        raise p.unexpected()
+
+    while True:
         if p.accept('('):
             args = p.expect(rules.sepby(parseframe, ','))
             p.expect(')')
-            return Call(sym, args)
+            expr = Call(expr, args)
+        elif p.accept('{'):
+            args = p.expect(rules.sepby(parseframe, ','))
+            p.expect('}')
+            expr = Call(Sym('.ctor.%s' % expr.name), args)
         else:
-            return sym
-    elif p.accept(Num):
-        return p.match
-    elif p.accept('int'):
-        return IntT()
-    else:
-        raise p.unexpected()
+            return expr
 
 def parseexprs(p):
     if p.accept('void'):
@@ -131,15 +137,20 @@ def parsedecl(p):
         p.expect('}')
 
         return Fun(name, args, stmts)
-    elif p.accept('type'):
+    elif p.accept('type') or p.accept('struct'):
         name = p.expect(Sym)
+        args = []
+
+        if p.accept('('):
+            args = p.expect(rules.sepby(Sym, ','))
+            p.expect(')')
 
         p.expect('{')
         stmts = p.expect(rules.sepby(parsetypestmt, ';'))
         stmts = [s for s in stmts if s]
         p.expect('}')
 
-        return Type(name, stmts)
+        return Struct(name, args, stmts)
     elif p.accept('interface'):
         name = p.expect(Sym)
 

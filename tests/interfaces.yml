@@ -17,7 +17,7 @@
         def x = int
 
     def f = t -> int
-    fun f(t)
+    fun f(x)
         return 0
 
 - code: |
@@ -41,8 +41,8 @@
         return 2
 
     fun g()
-        f(t(0))
-        f(u(0))
+        f(t{0})
+        f(u{0})
         return 0
 
 - code: |
@@ -70,8 +70,8 @@
         return f(x)
 
     fun h()
-        g(t(0))
-        g(u(0))
+        g(t{0})
+        g(u{0})
         return 0
 
 - code: |
@@ -98,8 +98,8 @@
         return f(x)
 
     fun h()
-        g(t(0))
-        g(u(0))
+        g(t{0})
+        g(u{0})
         return 0
 
 - code: |
@@ -125,8 +125,8 @@
         return f(x)
 
     fun h()
-        g(t(0))
-        g(u(0))
+        g(t{0})
+        g(u{0})
         return 0
 
 - code: |
@@ -148,6 +148,6 @@
         return f(x)
 
     fun h()
-        g(t(0))
-        g(u(0))
+        g(t{0})
+        g(u{0})
         return 0

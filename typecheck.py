@@ -309,14 +309,14 @@ def typedecl(self):
 
         type.args = [arg.var.type for arg in self.args]
         self.sym.var.type = type
-    elif isinstance(self, Type):
+    elif isinstance(self, Struct):
         self.sym.var.type = TypeT()
         for stmt in self.stmts:
             typestmt(stmt, self)
 
         self.ctor.var.type.args = [sym.var.type
-            for sym in stmt.targets
-            for stmt in self.stmts if isinstance(stmt, Def)]
+            for stmt in self.stmts if isinstance(stmt, Def)
+            for sym in stmt.targets]
     elif isinstance(self, Interface):
         self.sym.var.type = TypeT()
         for stmt in self.stmts:
