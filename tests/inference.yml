@@ -1,0 +1,31 @@
+- code: |
+    fun a()
+        return 0
+
+- code: |
+    fun a()
+        return 0
+
+    fun b()
+        return a()
+
+- code: |
+    fun b()
+        return a()
+
+    fun a()
+        return 0
+
+- code: |
+    fun a()
+        return a()
+  error: TypeException
+
+- code: |
+    fun a()
+        return b()
+
+    fun b()
+        return a()
+  error: TypeException
+

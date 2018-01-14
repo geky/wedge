@@ -1,0 +1,30 @@
+- code: |
+    def a = int -> int
+    fun a(x)
+        return 0
+
+- code: |
+    type t
+        def x = int
+
+    def a = t -> int
+    fun a(x)
+        return 0
+
+- code: |
+    type t
+        def x = int
+
+    def a = t -> t
+    fun a(x)
+        return 0
+  error: TypeException
+
+- code: |
+    type t
+        def x = int
+
+    def a = t -> t
+    fun a(x)
+        return t(0)
+

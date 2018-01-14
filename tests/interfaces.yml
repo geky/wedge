@@ -1,0 +1,153 @@
+- code: |
+    interface i
+        def f = i -> int
+
+    type t
+        impl i
+        def x = int
+
+  error: TypeException
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t
+        impl i
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t
+        impl i
+        def x = int
+
+    type u
+        impl i
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 1
+
+    def f = u -> int
+    fun f(u)
+        return 2
+
+    fun g()
+        f(t(0))
+        f(u(0))
+        return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t
+        impl i
+        def x = int
+
+    type u
+        impl i
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 1
+
+    def f = u -> int
+    fun f(u)
+        return 2
+
+    def g = i -> int
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(0))
+        g(u(0))
+        return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t
+        impl i
+        def x = int
+
+    type u
+        impl i
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 1
+
+    def f = u -> int
+    fun f(u)
+        return 2
+
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(0))
+        g(u(0))
+        return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t
+        def x = int
+
+    type u
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 1
+
+    def f = u -> int
+    fun f(u)
+        return 2
+
+    def g = i -> int
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(0))
+        g(u(0))
+        return 0
+
+- code: |
+    type t
+        def x = int
+
+    type u
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 1
+
+    def f = u -> int
+    fun f(u)
+        return 2
+
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(0))
+        g(u(0))
+        return 0
