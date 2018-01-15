@@ -34,7 +34,10 @@ def parsetype(p):
     return ts[0]
 
 def parseframe(p):
-    if p.accept(Sym):
+    if p.accept('('):
+        expr = parseframe(p)
+        p.expect(')')
+    elif p.accept(Sym):
         expr = p.match
     elif p.accept(Num):
         expr = p.match
@@ -51,7 +54,7 @@ def parseframe(p):
         elif p.accept('{'):
             args = p.expect(rules.sepby(parseframe, ','))
             p.expect('}')
-            expr = Call(Sym('.ctor.%s' % expr.name), args)
+            expr = Init(expr, args)
         else:
             return expr
 
@@ -86,10 +89,10 @@ def parsefnstmt(p):
         exprs = p.expect(parseexprs)
         return Let(names, exprs)
     elif p.accept('def'):
-        name = p.expect(rules.sepby(Sym, ','))
+        names = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
         exprs = p.expect(parseexprs)
-        return Def(name, exprs)
+        return Def(names, exprs)
     else:
         exprs = p.expect(parseexprs)
         return Expr(exprs) if len(exprs) > 0 else None
@@ -100,10 +103,10 @@ def parsetypestmt(p):
         p.expect('}')
         return s
     elif p.accept('def'):
-        name = p.expect(rules.sepby(Sym, ','))
+        names = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
         exprs = p.expect(parseexprs)
-        return Def(name, exprs)
+        return Def(names, exprs)
     elif p.accept('impl'):
         name = p.expect(Sym)
         return Impl(name)
@@ -116,10 +119,10 @@ def parseinterfacestmt(p):
         p.expect('}')
         return s
     elif p.accept('def'):
-        name = p.expect(rules.sepby(Sym, ','))
+        names = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
         exprs = p.expect(parseexprs)
-        return Def(name, exprs)
+        return Def(names, exprs)
     else:
         return None
 
@@ -161,10 +164,10 @@ def parsedecl(p):
 
         return Interface(name, stmts)
     elif p.accept('def'):
-        name = p.expect(rules.sepby(Sym, ','))
+        names = p.expect(rules.sepby(Sym, ','))
         p.expect('=')
         exprs = p.expect(parseexprs)
-        return Def(name, exprs)
+        return Def(names, exprs)
     elif p.accept('export'):
         name = p.expect(Sym)
         return Export(name)

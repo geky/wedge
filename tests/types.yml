@@ -39,3 +39,52 @@
     fun a(x)
         return t{}, u{1,2,3}
 
+- code: |
+    type t {}
+    type u
+        def x = t
+
+    def a = t -> u
+    fun a(x)
+        return u{t{}}
+
+- code: |
+    type t(a)
+        def x = a
+
+    def a = int -> t(int)
+    fun a(x)
+        return t(int){0}
+
+- code: |
+    type t(a)
+        def x = a
+
+    def a = int -> t
+  error: TypeException
+
+- code: |
+    type t(a)
+        def x = a
+
+    fun a(x)
+        return t{0}
+  error: TypeException
+
+- code: |
+    type t(a, b, c)
+        def x = a
+        def x = b
+        def x = c
+
+    def a = int -> t(int, int, int)
+    fun a(x)
+        return t(int, int, int){1, 2, 3}
+
+- code: |
+    type t(a)
+        def x = a
+
+    def a = int -> t(t(int))
+    fun a(x)
+        return t(t(int)){t(int){0}}

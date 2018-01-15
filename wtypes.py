@@ -9,6 +9,9 @@ class IntT:
     def __repr__(self):
         return 'IntT()'
 
+    def __str__(self):
+        return 'int'
+
     def __eq__(self, other):
         return isinstance(other, IntT)
 
@@ -24,7 +27,7 @@ class IntT:
     def expand(self):
         return self, False
 
-    def eval(self):
+    def eval(self, expand):
         return self
 
     def itersyms(self):
@@ -73,8 +76,10 @@ class FunT:
             
         return FunT(args, rets), expanded
 
-    def eval(self):
-        return self
+    def eval(self, expand):
+        return FunT(
+            [arg.eval(expand) for arg in self.args],
+            [ret.eval(expand) for ret in self.rets])
 
     def itersyms(self):
         for arg in self.args:
@@ -87,6 +92,50 @@ class FunT:
             yield from arg.iterexprs()
         for ret in self.rets:
             yield from ret.iterexprs()
+        yield self
+
+class StructT:
+    def __init__(self, fields):
+        self.fields = fields
+
+    def __repr__(self):
+        return 'StructT(%r)' % self.fields
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, StructT) and
+            self.fields == other.fields)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return (hash(FunT) +
+            sum(hash(field) for field in self.fields))
+
+    def sub(self, sym, rep):
+        return StructT(
+            [(key, type.sub(sym, rep)) for key, type in self.fields])
+
+    def expand(self):
+        fields, expanded = [], False
+        for key, type in self.fields:
+            t, x = type.expand()
+            fields.append((key, t))
+            expanded = expanded or x
+            
+        return StructT(fields), expanded
+
+    def eval(self, expand):
+        return self
+
+    def itersyms(self):
+        for _, type in self.fields:
+            yield from field.itersyms()
+
+    def iterexprs(self):
+        for _, type in self.field:
+            yield from field.iterexprs()
         yield self
 
 class InterfaceT:
@@ -128,7 +177,7 @@ class InterfaceT:
         cls.id = id + 1
         return Sym('.i%d' % id)
 
-    def eval(self):
+    def eval(self, expand):
         return self
 
     def itersyms(self):
@@ -137,22 +186,9 @@ class InterfaceT:
     def iterexprs(self):
         yield self
 
-#class StructT:
-#    def __init__(self, syms, types):
-#        self.syms = syms
-#        self.types = types
-#
-#    def __repr__(self):
-#        return 'StructT(%r, %r)' % (self.syms, self.types)
-#
-#    def __eq__(self, other):
-#        return (
-#            isinstance(other, StructT) and
-#            self.types == other.types)
-
 class TypeT:
     def __repr__(self):
-        return 'TypeT'
+        return 'TypeT()'
 
     def __eq__(self, other):
         return isinstance(other, TypeT)
@@ -169,7 +205,7 @@ class TypeT:
     def expand(self):
         return self, False
 
-    def eval(self):
+    def eval(self, expand):
         return self
 
     def itersyms(self):
@@ -178,4 +214,35 @@ class TypeT:
     def iterexprs(self):
         yield self
 
-
+#class ParameterT:
+#    def __init__(self, sym):
+#        self.sym = sym
+#
+#    def __repr__(self, sym):
+#        return 'ParameterT(%r)' % self.sym
+#
+#    def __eq__(self, other):
+#        return isinstance(other, TypeT)
+#
+#    def __ne__(self, other):
+#        return not self.__eq__(other)
+#
+#    def __hash__(self):
+#        return hash(TypeT)
+#
+#    def sub(self, sym, rep):
+#        return self
+#
+#    def expand(self):
+#        return self, False
+#
+#    def eval(self):
+#        return self
+#
+#    def itersyms(self):
+#        yield from []
+#
+#    def iterexprs(self):
+#        yield self
+#
+#

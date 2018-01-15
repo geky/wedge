@@ -86,9 +86,10 @@ class Sym:
         else:
             return self, False
 
-    def eval(self):
-        if hasattr(self, 'var') and hasattr(self.var, 'value'):
+    def eval(self, expand):
+        if not expand:
+            return self
+        elif hasattr(self, 'var') and hasattr(self.var, 'value'):
             return self.var.value
         else:
             raise EvalException("not able to eval %r" % self, self)
-

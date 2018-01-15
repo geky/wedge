@@ -11,6 +11,12 @@ def escapeexpr(self, home):
         self.callee = escapeexpr(self.callee, None)
         self.exprs = [escapeexpr(expr, None) for expr in self.exprs]
         return self
+    elif isinstance(self, Init):
+        if home:
+            self.home = home
+
+        self.exprs = [escapeexpr(expr, home) for expr in self.exprs]
+        return self
     elif isinstance(self, Num):
         if home:
             self.home = home

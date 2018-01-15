@@ -231,3 +231,35 @@ class Call:
 
         yield self
 
+    def eval(self, expand):
+        callee = self.callee.eval(False)
+        if hasattr(callee, 'var') and callee.var.pure:
+            args = [expr.eval(expand) for expr in self.exprs]
+            sym = callee.var.exec(*args)
+            return sym.eval(expand)
+
+        raise EvalException("not able to eval %r" % self, self)
+
+# Expressions
+class Init:
+    def __init__(self, callee=None, exprs=[]):
+        self.callee = callee
+        self.exprs = exprs
+
+    def __repr__(self):
+        return 'Init(%r, %r)' % (self.callee, self.exprs)
+
+    def itersyms(self):
+        yield from self.callee.itersyms()
+
+        for expr in self.exprs:
+            yield from expr.itersyms()
+
+    def iterexprs(self):
+        yield from self.callee.iterexprs()
+
+        for expr in self.exprs:
+            yield from expr.iterexprs()
+
+        yield self
+

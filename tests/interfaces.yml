@@ -151,3 +151,46 @@
         g(t{0})
         g(u{0})
         return 0
+
+- code: |
+    type t
+        def x = int
+
+    type u
+        def x = int
+
+    def f = t -> int
+    fun f(t)
+        return 1
+
+    fun f(u)
+        return 2
+
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t{0})
+        g(u{0})
+        return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t(a)
+        impl i
+        def x = a
+
+  error: TypeException
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t(a)
+        impl i
+        def x = a
+
+    fun f(x)
+        return 0

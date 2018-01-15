@@ -28,4 +28,3 @@
     fun b()
         return a()
   error: TypeException
-

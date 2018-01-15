@@ -75,6 +75,13 @@ def emitexpr(self, e):
         e.locals.append([
             '%s = call i32 %s(%s)' % (id, callee, ', '.join(args))])
         return rid if len(self.types) > 1 else id
+    elif isinstance(self, Init):
+        args = []
+        for expr in self.exprs:
+            args.append('i32 %s' % emitexpr(expr, e))
+
+        e.locals.append(['; TODO inits'])
+        return 0
     elif isinstance(self, Num):
         return '%d' % self.v
     elif isinstance(self, Sym):

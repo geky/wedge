@@ -37,10 +37,14 @@ def typeifacecount(self):
         return 0
     elif isinstance(self, FunT):
         return typeifacecount(self.args) + typeifacecount(self.rets)
+    elif isinstance(self, StructT):
+        return 0
     elif isinstance(self, Sym):
         return 0
     elif isinstance(self, InterfaceT):
         return 1
+    else:
+        raise NotImplementedError("typeifacecount not implemented for %r" % self)
 
 def typeifacecheck(iface, impl):
     for sym, type in iface.funs:
@@ -104,7 +108,7 @@ def typeexpect(self, expected, line=None):
 
             return self
     else:
-        raise TypeException("mismatched types %s and %s" %
+        raise TypeException("mismatched types %r and %r" %
             (self, expected), line or self)
 
 def typeinterfy(scope, overloads, line=None):
@@ -162,12 +166,20 @@ def typeexpansions(overloads):
 
     while overloads:
         for _, layer in groupby(overloads, lambda v: typeifacecount(v[1])):
+            layer = list(layer)
             yield layer
 
         expanded = []
         for var, type in overloads:
-            type, x = type.expand()
-            if x:
+            try:
+                type, x = type.expand()
+                if x:
+                    expanded.append((var, type))
+            except AttributeError:
+                # This _usually_ means we tried to expand a None
+                # this is a complete hack, but for now we just stick it on
+                # the end of the expansions.
+                # TODO add None support to expand (typeexpand?)
                 expanded.append((var, type))
 
         overloads = expanded
@@ -226,6 +238,20 @@ def typeframe(self, expected=None):
         self.types = rettypes
         self.type = rettypes[0] # Hmm
         return self.types
+    elif isinstance(self, Init):
+        argtypes = [typeexpr(expr) for expr in self.exprs]
+        typeexpr(self.callee, TypeT())
+        self.type = self.callee.eval(False)
+        self.struct = self.type.eval(True)
+
+        if not isinstance(self.struct, StructT):
+            raise TypeException(
+                "initializing not a struct %r" % self.callee, self.callee)
+
+        for expr, (_, type) in zip(self.exprs, self.struct.fields):
+            typeexpr(expr, type)
+
+        return [self.type]
     elif isinstance(self, Num):
         self.type = typeexpect([IntT()], expected, self)[0]
         return [self.type]
@@ -274,12 +300,14 @@ def typestmt(self, decl):
     elif isinstance(self, Def):
         for sym, expr in zip(self.targets, self.exprs):
             typeexpr(expr, TypeT())
-            sym.var.type = expr.eval()
+            sym.var.type = expr.eval(False)
     elif isinstance(self, Impl):
         typeexpr(self.sym, TypeT())
-        interface = self.sym.eval()
+        interface = self.sym.eval(True)
 
         # try to find implementation of expected functions
+        # TODO enforce when parameterized, needs parameterized defs
+        #if len(decl.args) == 0:
         interface.impls.add(decl.sym)
     elif isinstance(self, Return):
         expected = self.scope['.rets'].types
@@ -310,13 +338,48 @@ def typedecl(self):
         type.args = [arg.var.type for arg in self.args]
         self.sym.var.type = type
     elif isinstance(self, Struct):
+        # TODO is this ok if we ref ourselves?
+        # with params?
         self.sym.var.type = TypeT()
+
+        for arg in self.args:
+            arg.var.type = None
+
         for stmt in self.stmts:
             typestmt(stmt, self)
 
-        self.ctor.var.type.args = [sym.var.type
+        struct = StructT([(sym, sym.var.type)
             for stmt in self.stmts if isinstance(stmt, Def)
-            for sym in stmt.targets]
+            for sym in stmt.targets])
+
+        if len(self.args) == 0:
+            self.sym.var.value = struct
+#StructT([(sym, sym.var.type)
+#                for stmt in self.stmts if isinstance(stmt, Def)
+#                for sym in stmt.targets])
+        else:
+            args = [TypeT() for arg in self.args]
+            rets = [TypeT()]
+
+            self.sym.var.type = FunT(args, rets)
+            self.sym.var.pure = True
+
+            def executor(*args):
+                nstruct = struct
+                for sym, arg in zip(self.args, args):
+                    nstruct = nstruct.sub(sym, arg)
+
+                sym = Sym('%s(%s)' % (self.sym, ','.join(map(str, args))))
+                self.scope.globals().bind(sym, type=TypeT(), value=nstruct)
+                return sym
+
+            self.sym.var.exec = executor
+
+#            self.sym.var.impl = RawFunImpl([
+#                "; TODO uh, type get?",
+#                "; this shouldn't be emitted",
+#                "ret i32 0"
+#            ])
     elif isinstance(self, Interface):
         self.sym.var.type = TypeT()
         for stmt in self.stmts:
@@ -333,13 +396,13 @@ def typedecl(self):
     elif isinstance(self, Extern):
         for sym, expr in zip(self.targets, self.exprs):
             typeexpr(expr, TypeT())
-            sym.var.type = expr.eval()
+            sym.var.type = expr.eval(False)
     elif isinstance(self, Export):
         pass
     elif isinstance(self, Def):
         for sym, expr in zip(self.targets, self.exprs):
             typeexpr(expr, TypeT())
-            sym.var.type = expr.eval()
+            sym.var.type = expr.eval(False)
     else:
         raise NotImplementedError("typedecl not implemented for %r" % self)
 
@@ -364,7 +427,16 @@ def typecheck(scope):
     for iface in scope.itervalues():
         if isinstance(iface, InterfaceT):
             for impl in iface.impls:
-                typeifacecheck(iface, impl)
+                if (isinstance(impl, Sym) and
+                    hasattr(impl.var, 'impl') and
+                    len(impl.var.impl.args) > 0):
+
+                    assert impl.var.pure
+                    ntype = impl.var.exec(*[Sym(s) for s in impl.var.impl.args])
+                    typeifacecheck(iface, ntype)
+                else:
+                    typeifacecheck(iface, impl)
 
     for expr in scope.iterexprs():
-        assert expr.type
+        assert hasattr(expr, 'type'), (
+            "%r has no type after typecheck" % expr)

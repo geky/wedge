@@ -47,10 +47,11 @@ struct b
     impl q
     def x = int
 
-struct c(a)
+struct c(a, b)
     impl q
     def x = int
-    def y = int
+    def y = a
+    def z = b
 
 def d = int -> int
 fun d(x)
@@ -60,13 +61,13 @@ def d = a -> int
 fun d(x)
     return 73
 
-def d = b -> int
+//def d = b -> int
 fun d(x)
     return 33
 
-def d = c -> int
-fun d(x)
-    return 10
+//def d = c(int, int) -> int
+//fun d(x)
+///    return 10
 
 fun e(x)
     return d(x)
@@ -77,10 +78,10 @@ fun f(x)
 export main
 def main = void -> int
 fun main()
-    putchar(f(0))
-    putchar(f(a{0}))
-    putchar(f(b{0}))
-    putchar(f(c{0,0}))
+    putchar(e(0))
+    putchar(e(a{0}))
+    putchar(e(b{0}))
+    putchar(e(c(int, int){0,0}))
     return 0
 
 ////interface gahe

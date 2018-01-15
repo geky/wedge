@@ -292,6 +292,11 @@ def scopeexpr(self, scope):
         scopeexpr(self.callee, scope)
         for e in self.exprs:
             scopeexpr(e, scope)
+    elif isinstance(self, Init):
+        self.scope = scope
+        scopeexpr(self.callee, scope)
+        for e in self.exprs:
+            scopeexpr(e, scope)
     elif isinstance(self, Num):
         self.scope = scope
     elif isinstance(self, Str):
@@ -361,15 +366,6 @@ def scandecl(self, scope):
     elif isinstance(self, Struct):
         self.scope = scope
         scope.bind(self.sym, decl=self, impl=self)
-
-        self.ctor = Sym('.ctor.%s' % self.sym)
-        scope.bind(self.ctor, decl=self, line=self.line,
-            type=FunT(None, [self.sym]),
-            impl=RawFunImpl([
-                "; TODO constructor function",
-                "ret i32 0",
-            ]),
-        )
     elif isinstance(self, Interface):
         self.scope = scope
         scope.bind(self.sym, decl=self)
@@ -392,7 +388,7 @@ def scandecl(self, scope):
     elif isinstance(self, Def):
         self.scope = scope
         for sym in self.targets:
-            scope.bind(sym, decl=self)
+            scope = scope.bind(sym, decl=self)
     else:
         raise NotImplementedError("scandecl not implemented for %r" % self)
 
@@ -439,6 +435,7 @@ def scopecheck(ptree):
 
     for decl in ptree:
         for expr in decl.iterexprs():
-            assert expr.scope
+            assert hasattr(expr, 'scope'), (
+                "%r has no scope after scopecheck" % expr)
 
     return scope

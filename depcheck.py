@@ -34,6 +34,9 @@ def depexpr(self, d):
         d.append(self.callee.var)
         for e in self.exprs:
             depexpr(e, d)
+    elif isinstance(self, Init):
+        for e in self.exprs:
+            depexpr(e, d)
     elif isinstance(self, Num):
         pass
     elif isinstance(self, Str):
@@ -66,7 +69,7 @@ def depdecl(self, d):
             depstmt(s, d)
     elif isinstance(self, Extern):
         pass
-    elif isinstance(self, Type):
+    elif isinstance(self, Type) or isinstance(self, Struct):
         for s in self.stmts:
             depstmt(s, d)
     elif isinstance(self, RawFunImpl):
