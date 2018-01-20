@@ -50,7 +50,7 @@ class GlobalScope:
             sym = Sym(sym)
 
         for var in reversed(self.table):
-            if sym == var.sym:
+            if sym.name == var.sym.name:
                 if hasattr(var, 'impl'):
                     break
 
@@ -68,7 +68,7 @@ class GlobalScope:
         if not isinstance(sym, Sym):
             sym = Sym(sym)
 
-        return [var for var in self.table if var.sym == sym]
+        return [var for var in self.table if var.sym.name == sym.name]
 
     def __getitem__(self, sym):
         overloads = self.getoverloads(sym)
@@ -142,7 +142,7 @@ class LocalScope:
 
         scope = self
         while scope.var is not None:
-            if scope.var.sym == sym:
+            if scope.var.sym.name == sym.name:
                 if hasattr(scope.var, 'impl'):
                     break
 
@@ -163,7 +163,7 @@ class LocalScope:
         if not isinstance(sym, Sym):
             sym = Sym(sym)
 
-        if self.var is not None and self.var.sym == sym:
+        if self.var is not None and self.var.sym.name == sym.name:
             return [self.var]
 
         return self.tail.getoverloads(sym)
@@ -327,12 +327,10 @@ def scopestmt(self, scope):
             scope = scope.bind(sym, decl=self, impl=self)
         return scope
     elif isinstance(self, Def):
-        scopeexprs(self.exprs, scope)
-        for sym in self.targets:
-            scope = scope.bind(sym, decl=self)
-        return scope
+        scopeexpr(self.expr, scope)
+        return scope.bind(self.sym, decl=self)
     elif isinstance(self, Impl):
-        scopeexpr(self.sym, scope)
+        scopeexpr(self.expr, scope)
         return scope
     elif isinstance(self, Return):
         self.scope = scope
@@ -346,15 +344,17 @@ def scopestmt(self, scope):
 
 def scanpseudostmt(self, scope):
     if isinstance(self, Def):
-        for sym in self.targets:
-            scope = scope.bind(sym, decl=self)
-        return scope
+        return scope.bind(self.sym, decl=self)
     else:
         raise NotImplementedError("scopepseudostmt not implemented for %r" % self)
 
 def scopepseudostmt(self, scope):
     if isinstance(self, Def):
-        scopeexprs(self.exprs, scope)
+        nscope = LocalScope(scope)
+        for arg in self.args:
+            nscope = nscope.bind(arg)
+
+        scopeexpr(self.expr, nscope)
     else:
         raise NotImplementedError("scopepseudostmt not implemented for %r" % self)
 
@@ -371,24 +371,26 @@ def scandecl(self, scope):
         scope.bind(self.sym, decl=self)
 
         nscope = LocalScope(scope)
+        for arg in self.args:
+            nscope = nscope.bind(arg)
+
+        nscope = LocalScope(nscope)
         for stmt in self.stmts:
             nscope = scanpseudostmt(stmt, nscope)
 
         self.nscope = nscope
         for var in self.nscope.locals():
-            scope.bind(var, impl=self)
+            scope.bind(var, decl=self, impl=self)
     elif isinstance(self, Extern):
         self.scope = scope
         for sym in self.targets:   
             scope.bind(sym, decl=self, impl=self, extern=True)
-        return scope
     elif isinstance(self, Export):
         self.scope = scope
         scope.bind(self.sym, decl=self, export=True)
     elif isinstance(self, Def):
         self.scope = scope
-        for sym in self.targets:
-            scope = scope.bind(sym, decl=self)
+        scope.bind(self.sym, decl=self)
     else:
         raise NotImplementedError("scandecl not implemented for %r" % self)
 
@@ -420,7 +422,11 @@ def scopedecl(self, scope):
     elif isinstance(self, Export):
         pass
     elif isinstance(self, Def):
-        scopeexprs(self.exprs, scope)
+        nscope = LocalScope(scope)
+        for arg in self.args:
+            nscope = nscope.bind(arg)
+
+        scopeexpr(self.expr, nscope)
     else:
         raise NotImplementedError("scopedecl not implemented for %r" % self)
 

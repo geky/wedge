@@ -21,13 +21,13 @@ class IntT:
     def __hash__(self):
         return hash(IntT)
 
-    def sub(self, sym, rep):
+    def sub(self, sym, rep, exclude=set()):
         return self
 
-    def expand(self):
+    def expand(self, exclude=set()):
         return self, False
 
-    def eval(self, expand):
+    def eval(self, expand, exclude=set()):
         return self
 
     def itersyms(self):
@@ -58,28 +58,28 @@ class FunT:
             sum(hash(arg) for arg in self.args) +
             sum(hash(ret) for ret in self.rets))
 
-    def sub(self, sym, rep):
+    def sub(self, sym, rep, exclude=set()):
         return FunT(
-            [arg.sub(sym, rep) for arg in self.args],
-            [ret.sub(sym, rep) for ret in self.rets])
+            [arg.sub(sym, rep, exclude) for arg in self.args],
+            [ret.sub(sym, rep, exclude) for ret in self.rets])
 
-    def expand(self):
+    def expand(self, exclude=set()):
         args, rets, expanded = [], [], False
         for arg in self.args:
-            a, x = arg.expand()
+            a, x = arg.expand(exclude)
             args.append(a)
             expanded = expanded or x
         for ret in self.rets:
-            r, x = ret.expand()
+            r, x = ret.expand(exclude)
             rets.append(r)
             expanded = expanded or x
             
         return FunT(args, rets), expanded
 
-    def eval(self, expand):
+    def eval(self, expand, exclude=set()):
         return FunT(
-            [arg.eval(expand) for arg in self.args],
-            [ret.eval(expand) for ret in self.rets])
+            [arg.eval(expand, exclude) for arg in self.args],
+            [ret.eval(expand, exclude) for ret in self.rets])
 
     def itersyms(self):
         for arg in self.args:
@@ -93,6 +93,9 @@ class FunT:
         for ret in self.rets:
             yield from ret.iterexprs()
         yield self
+
+    def raw(self):
+        return self
 
 class StructT:
     def __init__(self, fields):
@@ -113,20 +116,20 @@ class StructT:
         return (hash(FunT) +
             sum(hash(field) for field in self.fields))
 
-    def sub(self, sym, rep):
+    def sub(self, sym, rep, exclude=set()):
         return StructT(
-            [(key, type.sub(sym, rep)) for key, type in self.fields])
+            [(key, type.sub(sym, rep, exclude)) for key, type in self.fields])
 
-    def expand(self):
+    def expand(self, exclude=set()):
         fields, expanded = [], False
         for key, type in self.fields:
-            t, x = type.expand()
+            t, x = type.expand(exclude)
             fields.append((key, t))
             expanded = expanded or x
             
         return StructT(fields), expanded
 
-    def eval(self, expand):
+    def eval(self, expand, exclude=set()):
         return self
 
     def itersyms(self):
@@ -152,6 +155,12 @@ class InterfaceT:
     def __repr__(self):
         return 'InterfaceT(%r, %r)' % (str(self.sym), self.funs)
 
+    @classmethod
+    def getiid(cls):
+        id = getattr(cls, 'id', 0)
+        cls.id = id + 1
+        return Sym('.i%d' % id)
+
     def __eq__(self, other):
         return (
             isinstance(other, InterfaceT) and
@@ -163,21 +172,15 @@ class InterfaceT:
     def __hash__(self):
         return hash(InterfaceT) + hash(self.sym)
 
-    def sub(self, sym, rep):
+    def sub(self, sym, rep, exclude=set()):
         return InterfaceT(self.sym,
-            {(sym, type.sub(sym, rep)) for sym, type in self.funs},
+            {(sym, type.sub(sym, rep, exclude)) for sym, type in self.funs},
             self.impls)
 
-    def expand(self):
+    def expand(self, exclude=set()):
         return self, False
 
-    @classmethod
-    def getiid(cls):
-        id = getattr(cls, 'id', 0)
-        cls.id = id + 1
-        return Sym('.i%d' % id)
-
-    def eval(self, expand):
+    def eval(self, expand, exclude=set()):
         return self
 
     def itersyms(self):
@@ -185,6 +188,52 @@ class InterfaceT:
 
     def iterexprs(self):
         yield self
+
+class ParamedT:
+    def __init__(self, syms, type):
+        self.syms = syms
+        self.type = type
+
+    def __repr__(self):
+        return 'ParamedT(%r, %r)' % (self.syms, self.type)
+
+    def __eq__(self, other):
+        # TODO sub params?
+        return isinstance(other, ParamedT) and self.type == other.type
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash(ParamedT) + hash(self.type) 
+
+    def sub(self, sym, rep, exclude=set()):
+        if isinstance(sym, Sym) and any(params.name == sym.name for params in self.syms):
+            return self
+
+        return ParamedT(self.syms,
+            self.type.sub(sym, rep, exclude | set(self.syms)))
+
+    def expand(self, exclude=set()):
+        type, x = self.type.expand(exclude | set(self.syms))
+        return ParamedT(self.syms, type), x
+
+    def eval(self, expand, exclude=set()):
+        return ParamedT(self.syms,
+            self.type.eval(expand, exclude | set(self.syms)))
+
+    def itersyms(self):
+        yield from self.type.itersyms()
+
+    def iterexprs(self):
+        yield from self.type.iterexprs()
+        yield self
+
+    def raw(self):
+        ntype = self.type
+        for sym in self.syms:
+            ntype = ntype.sub(sym, None)
+        return ntype
 
 class TypeT:
     def __repr__(self):
@@ -199,13 +248,13 @@ class TypeT:
     def __hash__(self):
         return hash(TypeT)
 
-    def sub(self, sym, rep):
+    def sub(self, sym, rep, exclude=set()):
         return self
 
-    def expand(self):
+    def expand(self, exclude=set()):
         return self, False
 
-    def eval(self, expand):
+    def eval(self, expand, exclude=set()):
         return self
 
     def itersyms(self):

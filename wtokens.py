@@ -60,7 +60,13 @@ class Sym:
         return self.name
 
     def __eq__(self, other):
-        return (isinstance(other, Sym) and self.name == other.name)
+        if isinstance(other, Sym) and self.name == other.name:
+            if hasattr(self, 'var') and hasattr(other, 'var'):
+                return self.var == other.var
+            else:
+                return True
+        else:
+            return False
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -74,22 +80,24 @@ class Sym:
     def iterexprs(self):
         yield self
 
-    def sub(self, sym, rep):
-        if sym == self:
+    def sub(self, sym, rep, exclude=set()):
+        if self not in exclude and sym == self:
             return rep
         else:
             return self
 
-    def expand(self):
-        if hasattr(self, 'var') and hasattr(self.var, 'value'):
+    def expand(self, exclude=set()):
+        if self not in exclude and (
+            hasattr(self, 'var') and hasattr(self.var, 'value')):
             return self.var.value, True
         else:
             return self, False
 
-    def eval(self, expand):
-        if not expand:
+    def eval(self, expand, exclude=set()):
+        if not expand or self in exclude:
             return self
         elif hasattr(self, 'var') and hasattr(self.var, 'value'):
             return self.var.value
         else:
             raise EvalException("not able to eval %r" % self, self)
+

@@ -32,7 +32,16 @@ def mangletype(self):
     elif isinstance(self, InterfaceT):
         return mangletype(self.sym) # TODO hm
     elif isinstance(self, Sym):
-        return '%d%s' % (len(self.name), self.name)
+        # TODO sanitize better?
+        return '%d%s' % (len(self.name), self.name.replace('(', '.').replace(')', '.'))
+    elif isinstance(self, ParamedT):
+        return 'p%sr%se' % (
+            ''.join(mangletype(sym) for sym in self.syms),
+            mangletype(self.type))
+    elif isinstance(self, Call):
+        return 'c%sr%se' % (
+            mangletype(self.callee),
+            ''.join(mangletype(expr) for expr in self.exprs))
     else:
         raise NotImplementedError("mangletype not implemented for %r" % self)
 
@@ -150,7 +159,8 @@ def emitvar(self, e):
             e.locals.append([
                 'store i32 %%a%d, i32* %s, align 4' % (i, mangle(arg))])
 
-        if len(self.type.rets) > 1:
+        # TODO ParamedT?
+        if len(self.type.raw().rets) > 1:
             rtype = '{%s}' % ', '.join('i32' for _ in self.sym.type.rets)
             args.append('%s* %%r' % rtype)
 

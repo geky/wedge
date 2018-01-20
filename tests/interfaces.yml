@@ -194,3 +194,211 @@
 
     fun f(x)
         return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t(a)
+        impl i
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t(a)
+        impl i
+        def x = a
+
+    def f = t(int) -> int
+    fun f(x)
+        return 0
+  error: TypeException
+
+- code: |
+    interface i(a)
+        def f = i(a) -> int
+
+    type t(a)
+        impl i(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+- code: |
+    interface i(a)
+        def f = i(a) -> int
+
+    type t(a)
+        impl i(a)
+        def x = a
+
+    def f = t(int) -> int
+    fun f(x)
+        return 0
+  error: TypeException
+
+- code: |
+    interface i(a)
+        def f = i(a) -> int
+
+    type t(a)
+        impl i
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+  error: TypeException
+
+- code: |
+    interface i
+        def f = i -> int
+
+    type t(a)
+        impl i(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+  error: TypeException
+
+- code: |
+    interface i(a)
+        def f = i(a) -> int
+
+    type t(a)
+        impl i(a)
+        def x = a
+
+    type u(a)
+        impl i(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+    def f(a) = u(a) -> int
+    fun f(x)
+        return 1
+
+    fun g()
+        f(t(int){0})
+        f(u(int){0})
+        return 0
+
+- code: |
+    interface i(a)
+        def f = a -> int
+
+    type t(a)
+        impl i(a)
+        def x = a
+
+    type u(a)
+        impl i(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+    def f(a) = u(a) -> int
+    fun f(x)
+        return 1
+
+    def g = i(int) -> int
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(int){0})
+        g(u(int){0})
+        return 0
+
+- code: |
+    interface i(a)
+        def f = a -> int
+
+    type t(a)
+        def x = a
+
+    type u(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+    def f(a) = u(a) -> int
+    fun f(x)
+        return 1
+
+    def g = i(int) -> int
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(int){0})
+        g(u(int){0})
+        return 0
+
+- code: |
+    interface i(a)
+        def f = i(a) -> int
+
+    type t(a)
+        impl i(a)
+        def x = a
+
+    type u(a)
+        impl i(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+    def f(a) = u(a) -> int
+    fun f(x)
+        return 1
+
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(int){0})
+        g(u(int){0})
+        return 0
+
+- code: |
+    type t(a)
+        def x = a
+
+    type u(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+    def f(a) = u(a) -> int
+    fun f(x)
+        return 1
+
+    fun g(x)
+        return f(x)
+
+    fun h()
+        g(t(int){0})
+        g(u(int){0})
+        return 0

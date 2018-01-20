@@ -88,3 +88,82 @@
     def a = int -> t(t(int))
     fun a(x)
         return t(t(int)){t(int){0}}
+
+- code: |
+    type t(a)
+        def x = a
+
+    def f(a) = t(a) -> int
+    fun f(x)
+        return 0
+
+    fun g()
+        return f(t(int){0})
+
+- code: |
+    type t(a, b)
+        def x = a
+        def y = b
+
+    type u
+        def x = int
+
+    def f(a) = t(a, a) -> int
+    fun f(x)
+        return 0
+
+    fun g()
+        f(t(int, int){0, 0})
+        f(t(u, u){u{0}, u{0}})
+        return 0
+
+- code: |
+    type t(a, b)
+        def x = a
+        def y = b
+
+    type u
+        def x = int
+
+    def f(a) = t(a, a) -> int
+    fun f(x)
+        return 0
+
+    fun g()
+        f(t(int, u){0, u{0}})
+        return 0
+  error: TypeException
+
+- code: |
+    type t(a, b)
+        def x = a
+        def y = b
+
+    type u
+        def x = int
+
+    def f(a) = a, a -> int
+    fun f(x, y)
+        return 0
+
+    fun g()
+        f(0, 0)
+        f(u{0}, u{0})
+        return 0
+
+- code: |
+    type t(a, b)
+        def x = a
+        def y = b
+
+    type u
+        def x = int
+
+    def f(a) = a, a -> int
+    fun f(x)
+        return 0
+
+    fun g()
+        f(0, u{0})
+        return 0
+  error: TypeException

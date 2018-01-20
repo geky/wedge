@@ -89,10 +89,10 @@ def parsefnstmt(p):
         exprs = p.expect(parseexprs)
         return Let(names, exprs)
     elif p.accept('def'):
-        names = p.expect(rules.sepby(Sym, ','))
+        name = p.expect(Sym)
         p.expect('=')
-        exprs = p.expect(parseexprs)
-        return Def(names, exprs)
+        expr = p.expect(parseexpr)
+        return Def(name, [], expr)
     else:
         exprs = p.expect(parseexprs)
         return Expr(exprs) if len(exprs) > 0 else None
@@ -103,13 +103,19 @@ def parsetypestmt(p):
         p.expect('}')
         return s
     elif p.accept('def'):
-        names = p.expect(rules.sepby(Sym, ','))
-        p.expect('=')
-        exprs = p.expect(parseexprs)
-        return Def(names, exprs)
-    elif p.accept('impl'):
         name = p.expect(Sym)
-        return Impl(name)
+        args = []
+
+        if p.accept('('):
+            args = p.expect(rules.sepby(Sym, ','))
+            p.expect(')')
+
+        p.expect('=')
+        expr = p.expect(parseexpr)
+        return Def(name, args, expr)
+    elif p.accept('impl'):
+        expr = p.expect(parseexpr)
+        return Impl(expr)
     else:
         return None
 
@@ -119,10 +125,16 @@ def parseinterfacestmt(p):
         p.expect('}')
         return s
     elif p.accept('def'):
-        names = p.expect(rules.sepby(Sym, ','))
+        name = p.expect(Sym)
+        args = []
+
+        if p.accept('('):
+            args = p.expect(rules.sepby(Sym, ','))
+            p.expect(')')
+
         p.expect('=')
-        exprs = p.expect(parseexprs)
-        return Def(names, exprs)
+        expr = p.expect(parseexpr)
+        return Def(name, args, expr)
     else:
         return None
 
@@ -156,18 +168,29 @@ def parsedecl(p):
         return Struct(name, args, stmts)
     elif p.accept('interface'):
         name = p.expect(Sym)
+        args = []
+
+        if p.accept('('):
+            args = p.expect(rules.sepby(Sym, ','))
+            p.expect(')')
 
         p.expect('{')
         stmts = p.expect(rules.sepby(parseinterfacestmt, ';'))
         stmts = [s for s in stmts if s]
         p.expect('}')
 
-        return Interface(name, stmts)
+        return Interface(name, args, stmts)
     elif p.accept('def'):
-        names = p.expect(rules.sepby(Sym, ','))
+        name = p.expect(Sym)
+        args = []
+
+        if p.accept('('):
+            args = p.expect(rules.sepby(Sym, ','))
+            p.expect(')')
+
         p.expect('=')
-        exprs = p.expect(parseexprs)
-        return Def(names, exprs)
+        expr = p.expect(parseexpr)
+        return Def(name, args, expr)
     elif p.accept('export'):
         name = p.expect(Sym)
         return Export(name)
