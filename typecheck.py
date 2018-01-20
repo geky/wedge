@@ -55,14 +55,17 @@ def typeifacecount(self):
     else:
         raise NotImplementedError("typeifacecount not implemented for %r" % self)
 
-def typeifacecheck(iface, impl):
-    impltype = typeexpect(impl, None)
-
+def typeifacecheck(iface, impl, args=[]):
     for sym, type in iface.funs:
         sym.var.disclude = True
-        ntype = type.sub(getattr(iface.sym, 'replacement', iface.sym), impl)
-        # TODO using replacement is hacky, see below
-        typeselect(sym.scope, sym, ntype)
+        ntype = type.sub(iface.target, impl)
+        if isinstance(ntype, ParamedT):
+            # dup to avoid multiple references
+            # TODO set operations? ParamedT merge func?
+            ntype.syms = list(set(ntype.syms) | set(args))
+        elif args:
+            ntype = ParamedT(args, ntype)
+        _, res = typeselect(sym.scope, sym, ntype)
         sym.var.disclude = False
 
 #TODO separate self and expected params
@@ -148,19 +151,30 @@ def typeexpect(self, expected, line=None, params=None):
                 return typeexpect(res, expected, line, params)
         except TypeException:
             pass
-    if isinstance(expected, ParamedT) or isinstance(self, ParamedT):
-        if not isinstance(expected, ParamedT):
-            expected, self = self, expected
+    if isinstance(self, ParamedT) or isinstance(expected, ParamedT):
+        if not isinstance(self, ParamedT):
+            self, expected = expected, self
 
         # clone because python default arg mess
         params = params or {}
-        params.update(dict.fromkeys(expected.syms, None))
+        params.update(dict.fromkeys(self.syms, None))
 
-        ntype = typeexpect(self, expected.type, line, params)
-        nsyms = [sym for sym in expected.syms if not typecomplete(params[sym])]
+        ntype = typeexpect(expected, self.type, line, params)
+#        nsyms = [sym for sym in self.syms
+#            if not typecomplete(params[sym]) or params[sym] in params]
+
+        nsyms = []
+        for sym in self.syms:
+            if not typecomplete(params[sym]):
+                nsyms.append(sym)
+                del params[sym]
+            else:
+                ntype = ntype.sub(sym, params[sym])
 
         if len(nsyms) == 0:
             return ntype
+        elif isinstance(ntype, ParamedT):
+            return ParamedT(list(set(ntype.syms) | set(nsyms)), ntype.type)
         else:
             return ParamedT(nsyms, ntype)
 
@@ -270,10 +284,16 @@ def typeselect(scope, sym, expected=None):
         for var, type in expansions:
             try:
                 type = typeexpect(type, expected)
+                if isinstance(expected, ParamedT):
+                    if not isinstance(type, ParamedT) or len(type.syms) < len(expected.syms):
+                        raise TypeException(":(") # TODO
                 options.append((var, type))
             except TypeException as e:
                 try:
                     type = typeexpect(type.eval(False), expected)
+                    if isinstance(expected, ParamedT):
+                        if not isinstance(type, ParamedT) or len(type.syms) < len(expected.syms):
+                            raise TypeException(":(") # TODO
                     options.append((var, type))
                 except EvalException:
                     pass
@@ -398,6 +418,7 @@ def typestmt(self, decl):
             else:
                 raise
 
+        # note this is changed later, bad idea? TODO
         decl.sym.var.ifaces.append(interface)
     elif isinstance(self, Return):
         expected = self.scope['.rets'].types
@@ -445,7 +466,7 @@ def typedecl(self):
 
         if len(self.args) == 0:
             self.sym.var.value = struct
-            self.sym.var.ifaces = [(iface, self.sym)
+            self.sym.var.ifaces = [(iface, self.sym, [])
                 for iface in self.sym.var.ifaces]
         else:
             args = [TypeT() for arg in self.args]
@@ -462,7 +483,7 @@ def typedecl(self):
                 self.scope.globals().bind(sym, type=TypeT(), value=nstruct)
                 return sym
             self.sym.var.exec = executor
-            self.sym.var.ifaces = [(iface, Call(self.sym, self.args))
+            self.sym.var.ifaces = [(iface, Call(self.sym, self.args), self.args)
                 for iface in self.sym.var.ifaces]
     elif isinstance(self, Interface):
         if len(self.args) == 0:
@@ -476,14 +497,12 @@ def typedecl(self):
         for stmt in self.stmts:
             typestmt(stmt, self)
 
-        # TODO SUPER HACKY, move this to Interface?
-        # Should all interfaces be assumed to have params?
         if len(self.args) == 0:
-            self.sym.replacement = self.sym
+            target = self.sym
         else:
-            self.sym.replacement = Call(self.sym, self.args)
+            target = Call(self.sym, self.args)
 
-        interface = InterfaceT(self.sym,
+        interface = InterfaceT(target,
             {(var.sym, var.type) for var in self.nscope.locals()})
 
         if len(self.args) == 0:
@@ -491,6 +510,25 @@ def typedecl(self):
         else:
             self.sym.var.pure = True
             def executor(*args):
+                funs = []
+                for name, type in interface.funs:
+                    assert isinstance(type, ParamedT)
+                    rawtype = type.type
+                    for sym, arg in zip(self.args, args):
+                        rawtype = rawtype.sub(sym, arg)
+
+                    syms = [arg for arg in args if isinstance(arg, Sym)]
+                    if syms:
+                        funs.append((name, ParamedT(syms, rawtype))) # TODO no syms?
+                    else:
+                        funs.append((name, rawtype))
+
+                ntarget = interface.target
+                for sym, arg in zip(self.args, args):
+                    ntarget = ntarget.sub(sym, arg)
+
+                return InterfaceT(ntarget, funs, interface.impls)
+
                 ninterface = interface
                 for sym, arg in zip(self.args, args):
                     ninterface = ninterface.sub(sym, arg)
@@ -541,8 +579,8 @@ def typecheck(scope):
 
     for var in scope:
         if hasattr(var, 'ifaces'):
-            for iface, impl in var.ifaces:
-                typeifacecheck(iface, impl)
+            for iface, impl, args in var.ifaces:
+                typeifacecheck(iface, impl, args)
 
     for expr in scope.iterexprs():
         assert hasattr(expr, 'type'), (

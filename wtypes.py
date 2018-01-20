@@ -142,18 +142,14 @@ class StructT:
         yield self
 
 class InterfaceT:
-    def __init__(self, sym, funs=set(), impls=set()):
-        if isinstance(sym, list):
-            impls = funs
-            funs = sym
-            sym = InterfaceT.getiid()
-
-        self.sym = sym
+    def __init__(self, target, funs, impls=None, rebindings=None):
+        self.target = target
         self.funs = funs
-        self.impls = impls or set()
+        self.impls = impls if impls is not None else set()
+        self.rebindings = rebindings if rebindings is not None else {} #TODO rm me
 
     def __repr__(self):
-        return 'InterfaceT(%r, %r)' % (str(self.sym), self.funs)
+        return 'InterfaceT(%r, %r)' % (str(self.target), self.funs)
 
     @classmethod
     def getiid(cls):
@@ -164,16 +160,16 @@ class InterfaceT:
     def __eq__(self, other):
         return (
             isinstance(other, InterfaceT) and
-            self.sym == other.sym)
+            self.target == other.target)
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __hash__(self):
-        return hash(InterfaceT) + hash(self.sym)
+        return hash(InterfaceT) + hash(self.target)
 
     def sub(self, sym, rep, exclude=set()):
-        return InterfaceT(self.sym,
+        return InterfaceT(self.target,
             {(sym, type.sub(sym, rep, exclude)) for sym, type in self.funs},
             self.impls)
 

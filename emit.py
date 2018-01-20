@@ -30,7 +30,7 @@ def mangletype(self):
     elif isinstance(self, TypeT):
         return 't'
     elif isinstance(self, InterfaceT):
-        return mangletype(self.sym) # TODO hm
+        return mangletype(self.target) # TODO hm
     elif isinstance(self, Sym):
         # TODO sanitize better?
         return '%d%s' % (len(self.name), self.name.replace('(', '.').replace(')', '.'))

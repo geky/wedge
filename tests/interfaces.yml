@@ -298,7 +298,7 @@
 
 - code: |
     interface i(a)
-        def f = a -> int
+        def f = i(a) -> int
 
     type t(a)
         impl i(a)
@@ -327,7 +327,7 @@
 
 - code: |
     interface i(a)
-        def f = a -> int
+        def f = i(a) -> int
 
     type t(a)
         def x = a
@@ -402,3 +402,43 @@
         g(t(int){0})
         g(u(int){0})
         return 0
+
+- code: |
+    interface i(a)
+        def f = i(a), a -> int
+
+    type t(b, c)
+        impl i(c)
+        def x = b
+        def y = c
+
+    def f(b, c) = t(b, c), c -> int
+    fun f(x, y)
+        return 0
+
+- code: |
+    interface i(a)
+        def f = i(a), a -> int
+
+    type t(b, c)
+        impl i(c)
+        def x = b
+        def y = c
+
+    def f(i, j, k) = t(i, j), k -> int
+    fun f(x, y)
+        return 0
+
+- code: |
+    interface i(a)
+        def f = i(a), a -> int
+
+    type t(b, c)
+        impl i(c)
+        def x = b
+        def y = c
+
+    def f(k) = t(k, k), k -> int
+    fun f(x, y)
+        return 0
+  error: TypeException
