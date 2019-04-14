@@ -248,16 +248,6 @@ class Call:
         return Call(self.callee.sub(sym, rep, exclude),
             [expr.sub(sym, rep, exclude) if expr else expr for expr in self.exprs])
 
-    def expand(self, exclude=set()):
-        callee, exprs, expanded = None, [], False
-        callee, expanded = self.callee.expand(exclude)
-        for expr in self.exprs:
-            e, x = expr.expand(exclude)
-            exprs.append(e)
-            expanded = expanded or x
-
-        return Call(callee, exprs), expanded
-
 # Expressions
 class Init:
     def __init__(self, callee=None, exprs=[]):

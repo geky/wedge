@@ -24,4 +24,15 @@ class CompileException(Exception):
             return "\n".join(lines)
         else:
             return self.message
-    
+
+def method(cls):
+    def decorator(f):
+        setattr(cls, f.__name__, f)
+        return f
+    return decorator
+
+def methods(cls):
+    for name, f in cls.__dict__.items():
+        if callable(f):
+            f.__name__ = cls.__name__
+            method(f.__globals__[name])(f)

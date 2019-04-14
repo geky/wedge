@@ -86,13 +86,6 @@ class Sym:
         else:
             return self
 
-    def expand(self, exclude=set()):
-        if self not in exclude and (
-            hasattr(self, 'var') and hasattr(self.var, 'value')):
-            return self.var.value, True
-        else:
-            return self, False
-
     def eval(self, expand, exclude=set()):
         if not expand or self in exclude:
             return self

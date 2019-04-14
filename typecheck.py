@@ -1,12 +1,128 @@
 from wsyntax import *
 from wtypes import *
-from util import CompileException
-from scopecheck import Var
+from util import CompileException, method, methods
+from scopecheck import Var, GlobalScope, LocalScope, LocalScopeSlice
 from itertools import chain, groupby
 
 
 class TypeException(CompileException):
     pass
+
+# Expand implementations
+@methods
+class expand:
+    def IntT(self, exclude=set()):
+        return self, False
+
+    def FunT(self, exclude=set()):
+        args, rets, expanded = [], [], False
+        for arg in self.args:
+            a, x = arg.expand(exclude)
+            args.append(a)
+            expanded = expanded or x
+        for ret in self.rets:
+            r, x = ret.expand(exclude)
+            rets.append(r)
+            expanded = expanded or x
+
+        return FunT(args, rets), expanded
+
+    def StructT(self, exclude=set()):
+        fields, expanded = [], False
+        for key, type in self.fields:
+            t, x = type.expand(exclude)
+            fields.append((key, t))
+            expanded = expanded or x
+
+        return StructT(fields), expanded
+
+    def InterfaceT(self, exclude=set()):
+        return self, False
+
+    def ParamedT(self, exclude=set()):
+        type, x = self.type.expand(exclude | set(self.syms))
+        return ParamedT(self.syms, type), x
+
+    def TypeT(self, exclude=set()):
+        return self, False
+
+    def Call(self, exclude=set()):
+        callee, exprs, expanded = None, [], False
+        callee, expanded = self.callee.expand(exclude)
+        for expr in self.exprs:
+            e, x = expr.expand(exclude)
+            exprs.append(e)
+            expanded = expanded or x
+
+        return Call(callee, exprs), expanded
+
+    def Sym(self, exclude=set()):
+        if self not in exclude and (
+            hasattr(self, 'var') and hasattr(self.var, 'value')):
+            return self.var.value, True
+        else:
+            return self, False
+
+#
+#@method(IntT)
+#def expand(self, exclude=set()):
+#    return self, False
+#
+#@method(FunT)
+#def expand(self, exclude=set()):
+#    args, rets, expanded = [], [], False
+#    for arg in self.args:
+#        a, x = arg.expand(exclude)
+#        args.append(a)
+#        expanded = expanded or x
+#    for ret in self.rets:
+#        r, x = ret.expand(exclude)
+#        rets.append(r)
+#        expanded = expanded or x
+#
+#    return FunT(args, rets), expanded
+#
+#@method(StructT)
+#def expand(self, exclude=set()):
+#    fields, expanded = [], False
+#    for key, type in self.fields:
+#        t, x = type.expand(exclude)
+#        fields.append((key, t))
+#        expanded = expanded or x
+#
+#    return StructT(fields), expanded
+#
+#@method(InterfaceT)
+#def expand(self, exclude=set()):
+#    return self, False
+#
+#@method(ParamedT)
+#def expand(self, exclude=set()):
+#    type, x = self.type.expand(exclude | set(self.syms))
+#    return ParamedT(self.syms, type), x
+#
+#@method(TypeT)
+#def expand(self, exclude=set()):
+#    return self, False
+#
+#@method(Call)
+#def expand(self, exclude=set()):
+#    callee, exprs, expanded = None, [], False
+#    callee, expanded = self.callee.expand(exclude)
+#    for expr in self.exprs:
+#        e, x = expr.expand(exclude)
+#        exprs.append(e)
+#        expanded = expanded or x
+#
+#    return Call(callee, exprs), expanded
+#
+#@method(Sym)
+#def expand(self, exclude=set()):
+#    if self not in exclude and (
+#        hasattr(self, 'var') and hasattr(self.var, 'value')):
+#        return self.var.value, True
+#    else:
+#        return self, False
 
 def typecomplete(self):
     if self is None:
@@ -65,7 +181,7 @@ def typeifacecheck(iface, impl, args=[]):
             ntype.syms = list(set(ntype.syms) | set(args))
         elif args:
             ntype = ParamedT(args, ntype)
-        _, res = typeselect(sym.scope, sym, ntype)
+        _, res = sym.scope.typeselect(sym, ntype)
         sym.var.disclude = False
 
 #TODO separate self and expected params
@@ -264,6 +380,9 @@ def typeexpansions(overloads):
 
         overloads = expanded
 
+@method(GlobalScope)
+@method(LocalScope)
+@method(LocalScopeSlice)
 def typeselect(scope, sym, expected=None):
     overloads = []
     for var in scope.getoverloads(sym):
@@ -361,7 +480,7 @@ def typeframe(self, expected=None):
         return [self.type]
     elif isinstance(self, Sym):
         expected = typeexpect([None], expected, self) # Hm
-        self.var, self.type = typeselect(self.scope, self, expected[0])
+        self.var, self.type = self.scope.typeselect(self, expected[0])
 
         if self.var.local:
             self.var.type = typeexpect(self.var.type, self.type, self) # Hm

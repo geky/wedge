@@ -24,9 +24,6 @@ class IntT:
     def sub(self, sym, rep, exclude=set()):
         return self
 
-    def expand(self, exclude=set()):
-        return self, False
-
     def eval(self, expand, exclude=set()):
         return self
 
@@ -62,19 +59,6 @@ class FunT:
         return FunT(
             [arg.sub(sym, rep, exclude) for arg in self.args],
             [ret.sub(sym, rep, exclude) for ret in self.rets])
-
-    def expand(self, exclude=set()):
-        args, rets, expanded = [], [], False
-        for arg in self.args:
-            a, x = arg.expand(exclude)
-            args.append(a)
-            expanded = expanded or x
-        for ret in self.rets:
-            r, x = ret.expand(exclude)
-            rets.append(r)
-            expanded = expanded or x
-            
-        return FunT(args, rets), expanded
 
     def eval(self, expand, exclude=set()):
         return FunT(
@@ -120,15 +104,6 @@ class StructT:
         return StructT(
             [(key, type.sub(sym, rep, exclude)) for key, type in self.fields])
 
-    def expand(self, exclude=set()):
-        fields, expanded = [], False
-        for key, type in self.fields:
-            t, x = type.expand(exclude)
-            fields.append((key, t))
-            expanded = expanded or x
-            
-        return StructT(fields), expanded
-
     def eval(self, expand, exclude=set()):
         return self
 
@@ -173,9 +148,6 @@ class InterfaceT:
             {(sym, type.sub(sym, rep, exclude)) for sym, type in self.funs},
             self.impls)
 
-    def expand(self, exclude=set()):
-        return self, False
-
     def eval(self, expand, exclude=set()):
         return self
 
@@ -210,10 +182,6 @@ class ParamedT:
         return ParamedT(self.syms,
             self.type.sub(sym, rep, exclude | set(self.syms)))
 
-    def expand(self, exclude=set()):
-        type, x = self.type.expand(exclude | set(self.syms))
-        return ParamedT(self.syms, type), x
-
     def eval(self, expand, exclude=set()):
         return ParamedT(self.syms,
             self.type.eval(expand, exclude | set(self.syms)))
@@ -246,9 +214,6 @@ class TypeT:
 
     def sub(self, sym, rep, exclude=set()):
         return self
-
-    def expand(self, exclude=set()):
-        return self, False
 
     def eval(self, expand, exclude=set()):
         return self
